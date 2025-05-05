@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+
+<AnchorPane prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.depavlo.ddlschematorfx.controller.DbSettingsController"> <children>
+    <VBox layoutX="10.0" layoutY="10.0" prefHeight="380.0" prefWidth="580.0" AnchorPane.bottomAnchor="10.0" AnchorPane.leftAnchor="10.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="10.0">
+        <children>
+            <Label text="Збережені підключення до БД" />
+            <ListView fx:id="connectionListView" prefHeight="100.0" prefWidth="200.0">
+                <VBox.margin>
+                    <Insets top="5.0" />
+                </VBox.margin>
+            </ListView>
+            <HBox alignment="CENTER_LEFT" prefHeight="30.0" prefWidth="200.0" spacing="5.0">
+                <VBox.margin>
+                    <Insets top="5.0" />
+                </VBox.margin>
+                <children>
+                    <Button mnemonicParsing="false" onAction="#handleNewConnection" text="Нове" /> <Button mnemonicParsing="false" onAction="#handleEditConnection" text="Редагувати" /> <Button mnemonicParsing="false" onAction="#handleDeleteConnection" text="Видалити" /> </children>
+            </HBox>
+            <Label text="Деталі підключення" VBox.vgrow="ALWAYS">
+                <VBox.margin>
+                    <Insets top="10.0" />
+                </VBox.margin>
+            </Label>
+            <GridPane hgap="5.0" prefHeight="150.0" prefWidth="580.0" vgap="5.0">
+                <columnConstraints>
+                    <ColumnConstraints hgrow="SOMETIMES" maxWidth="150.0" minWidth="10.0" prefWidth="100.0" />
+                    <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="400.0" />
+                </columnConstraints>
+                <rowConstraints>
+                    <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                    <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                    <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                    <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                    <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                </rowConstraints>
+                <children>
+                    <Label text="Назва:" />
+                    <TextField fx:id="nameTextField" GridPane.columnIndex="1" /> <Label text="URL:" GridPane.rowIndex="1" />
+                    <TextField fx:id="urlTextField" GridPane.columnIndex="1" GridPane.rowIndex="1" /> <Label text="Користувач:" GridPane.rowIndex="2" />
+                    <TextField fx:id="userTextField" GridPane.columnIndex="1" GridPane.rowIndex="2" /> <Label text="Пароль:" GridPane.rowIndex="3" />
+                    <PasswordField fx:id="passwordField" GridPane.columnIndex="1" GridPane.rowIndex="3" /> <Label text="Схема:" GridPane.rowIndex="4" />
+                    <TextField fx:id="schemaNameTextField" GridPane.columnIndex="1" GridPane.rowIndex="4" /> </children>
+            </GridPane>
+            <HBox alignment="CENTER_RIGHT" prefHeight="30.0" prefWidth="200.0" spacing="5.0">
+                <VBox.margin>
+                    <Insets top="10.0" />
+                </VBox.margin>
+                <children>
+                    <Button mnemonicParsing="false" onAction="#handleSaveConnection" text="Зберегти" /> <Button mnemonicParsing="false" onAction="#handleTestConnection" text="Тест підключення" /> <Button mnemonicParsing="false" onAction="#handleClose" text="Закрити" /> </children>
+            </HBox>
+        </children>
+    </VBox>
+</children>
+</AnchorPane>
