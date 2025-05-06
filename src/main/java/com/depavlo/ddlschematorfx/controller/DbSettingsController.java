@@ -150,84 +150,89 @@ public class DbSettingsController {
         // Отримуємо поточний виділений елемент (якщо є)
         ConnectionDetails selectedConnection = connectionListView.getSelectionModel().getSelectedItem();
 
-        if (selectedConnection == null) {
-            // *** Випадок: Жоден рядок не вибрано. Просто перезберігаємо поточний список. ***
+        // Зчитуємо дані з полів
+        String name = nameTextField.getText();
+        String url = urlTextField.getText();
+        String user = userTextField.getText();
+        String password = passwordField.getText(); // Пароль з поля введення
+        String schemaName = schemaNameTextField.getText();
+        String description = ""; // TODO: Add a field for description if needed
+
+        // *** Валідація та визначення сценарію (нове, редагування, перезбереження) ***
+
+        // Сценарій 1: Користувач намагається зберегти НОВЕ підключення
+        // Це відбувається, коли нічого не вибрано (після натискання "Нове" або при першому запуску)
+        // І поля введення НЕ порожні (користувач ввів дані).
+        if (selectedConnection == null && (!name.isEmpty() || !url.isEmpty() || !user.isEmpty() || !password.isEmpty() || !schemaName.isEmpty())) {
+            // Перевірка обов'язкових полів для НОВОГО підключення
+            if (name.isEmpty() || url.isEmpty() || user.isEmpty() || password.isEmpty() || schemaName.isEmpty()) {
+                showAlert(AlertType.WARNING, "Помилка валідації", "Неповні дані підключення.", "Будь ласка, заповніть всі обов'язкові поля (Назва, URL, Користувач, Пароль, Схема) для нового підключення.");
+                return; // Зупиняємо збереження, якщо дані неповні
+            }
+
+            // Всі обов'язкові поля для нового підключення заповнені - створюємо нове
+            String id = configManager.generateUniqueId(); // Генеруємо новий ID
+            String passwordToSave = password; // Використовуємо введений пароль (буде зашифровано в configManager)
+
+            ConnectionDetails newConnection = new ConnectionDetails(id, name, url, user, passwordToSave, schemaName, description);
+
+            // Додаємо нове підключення до списку в UI
+            savedConnections.add(newConnection);
+
+            // Зберігаємо весь оновлений список у файл
+            configManager.saveConnections(savedConnections.stream().toList());
+
+            showAlert(AlertType.INFORMATION, "Збереження", "Успіх", "Нове налаштування підключення збережено.");
+
+            // Опціонально: виділити збережене підключення у списку
+            connectionListView.getSelectionModel().select(newConnection);
+
+        } else if (selectedConnection != null) {
+            // Сценарій 2: Користувач намагається РЕДАГУВАТИ існуюче підключення
+            // Це відбувається, коли рядок вибрано у списку.
+
+            // Перевірка обов'язкових полів для РЕДАГУВАННЯ (пароль не обов'язковий, якщо не змінюється)
+            if (name.isEmpty() || url.isEmpty() || user.isEmpty() || schemaName.isEmpty()) {
+                showAlert(AlertType.WARNING, "Помилка валідації", "Неповні дані підключення.", "Будь ласка, заповніть всі обов'язкові поля (Назва, URL, Користувач, Схема) для редагування.");
+                return; // Зупиняємо збереження, якщо дані неповні
+            }
+
+            String id = selectedConnection.getId(); // Використовуємо ID існуючого підключення
+            String passwordToSave; // Пароль, який буде збережено
+
+            // Визначаємо, який пароль зберегти: новий з поля або старий збережений
+            if (password.isEmpty()) {
+                passwordToSave = selectedConnection.getPassword(); // Використовуємо вже зашифрований пароль
+            } else {
+                passwordToSave = password; // Використовуємо новий введений пароль (буде зашифровано в configManager)
+            }
+
+            // Видаляємо старий запис зі списку в пам'яті перед додаванням оновленого
+            savedConnections.remove(selectedConnection);
+
+            // Створюємо новий об'єкт ConnectionDetails з оновленими даними
+            ConnectionDetails updatedConnection = new ConnectionDetails(id, name, url, user, passwordToSave, schemaName, description);
+
+            // Додаємо оновлене підключення до списку в UI
+            savedConnections.add(updatedConnection);
+
+            // Зберігаємо весь оновлений список у файл
+            configManager.saveConnections(savedConnections.stream().toList());
+
+            showAlert(AlertType.INFORMATION, "Збереження", "Успіх", "Налаштування підключення оновлено.");
+
+            // Опціонально: виділити оновлене підключення у списку
+            connectionListView.getSelectionModel().select(updatedConnection);
+
+        } else {
+            // Сценарій 3: Користувач просто натиснув "Зберегти", коли нічого не вибрано
+            // І поля введення порожні. Це сценарій ПЕРЕЗБЕРЕЖЕННЯ.
             configManager.saveConnections(savedConnections.stream().toList());
             showAlert(AlertType.INFORMATION, "Збереження", "Успіх", "Всі налаштування підключень перезбережено.");
             // Очищаємо поля після перезбереження, оскільки вони не стосуються конкретного вибраного елемента
             showConnectionDetails(null);
             // Знімаємо виділення, якщо воно було (хоча при selectedConnection == null його і так немає)
             connectionListView.getSelectionModel().clearSelection();
-
-        } else {
-            // *** Випадок: Рядок вибрано. Зберігаємо або оновлюємо конкретне підключення. ***
-
-            // Зчитуємо дані з полів
-            String name = nameTextField.getText();
-            String url = urlTextField.getText();
-            String user = userTextField.getText();
-            String password = passwordField.getText(); // Пароль з поля введення
-            String schemaName = schemaNameTextField.getText();
-            String description = ""; // TODO: Add a field for description if needed
-
-            // *** Валідація ***
-            // Перевірка обов'язкових полів (крім пароля, який обробляється окремо)
-            if (name.isEmpty() || url.isEmpty() || user.isEmpty() || schemaName.isEmpty()) {
-                showAlert(AlertType.WARNING, "Помилка валідації", "Неповні дані підключення.", "Будь ласка, заповніть всі обов'язкові поля (Назва, URL, Користувач, Схема).");
-                return;
-            }
-
-            // Перевірка пароля: обов'язковий для нового підключення
-            // Якщо selectedConnection != null, це може бути редагування, і пароль не обов'язковий,
-            // якщо ми використовуємо старий.
-            if (password.isEmpty() && connectionListView.getSelectionModel().getSelectedItem() == null) { // Перевірка на нове підключення
-                showAlert(AlertType.WARNING, "Помилка валідації", "Не введено пароль.", "Будь ласка, введіть пароль для нового підключення.");
-                return;
-            }
-            // *** Кінець валідації ***
-
-
-            String id;
-            String passwordToSave; // Пароль, який буде збережено (або новий, або старий зашифрований)
-
-            // Визначаємо, чи це нове підключення, чи редагування існуючого
-            // selectedConnection вже отримано на початку методу
-            if (connectionListView.getSelectionModel().getSelectedItem() != null) { // Це редагування існуючого
-                id = selectedConnection.getId();
-
-                // Якщо поле пароля порожнє, використовуємо старий пароль з об'єкта
-                if (password.isEmpty()) {
-                    passwordToSave = selectedConnection.getPassword(); // Використовуємо вже зашифрований пароль
-                } else {
-                    passwordToSave = password; // Використовуємо новий введений пароль (буде зашифровано в configManager)
-                }
-
-                // Видаляємо старий запис зі списку в пам'яті перед додаванням оновленого
-                savedConnections.remove(selectedConnection);
-            } else { // Це нове підключення (хоча цей випадок має бути оброблений кнопкою "Нове" та валідацією)
-                // Цей else блок, ймовірно, не буде досягнуто, якщо користувач коректно
-                // використовує кнопку "Нове" перед заповненням полів для нового підключення.
-                // Але для повноти логіки:
-                id = configManager.generateUniqueId();
-                passwordToSave = password; // Використовуємо введений пароль
-            }
-
-            // Створюємо новий об'єкт ConnectionDetails
-            // Важливо: передаємо passwordToSave, який може бути або новим паролем (для шифрування),
-            // або старим зашифрованим паролем. configManager.saveConnections обробляє шифрування.
-            ConnectionDetails newConnection = new ConnectionDetails(id, name, url, user, passwordToSave, schemaName, description);
-
-            // Додаємо нове/оновлене підключення до списку в UI
-            savedConnections.add(newConnection);
-
-            // Зберігаємо весь оновлений список у файл
-            configManager.saveConnections(savedConnections.stream().toList());
-
-            // TODO: Показати повідомлення про успішне збереження користувачеві (наприклад, у панелі статусу)
-            showAlert(AlertType.INFORMATION, "Збереження", "Успіх", "Налаштування підключення збережено.");
-
-            // Опціонально: виділити збережене підключення у списку
-            connectionListView.getSelectionModel().select(newConnection);
         }
     }
 
@@ -255,37 +260,22 @@ public class DbSettingsController {
 
         // Визначаємо, який пароль використовувати для тесту:
         // Якщо поле пароля не порожнє, використовуємо його.
-        // Якщо поле пароля порожнє І вибрано існуюче підключення, використовуємо збережений пароль.
+        // Якщо поле пароля порожнє І вибрано існуюче підключення, використовуємо збережений пароль (дешифрований).
         // В іншому випадку (поле порожнє І немає вибраного підключення), пароля немає.
         if (!passwordFromField.isEmpty()) {
+            // Використовуємо пароль з поля введення
             passwordToUseForTest = passwordFromField;
         } else if (selectedConnection != null) {
+            // Поле пароля порожнє, але вибрано існуюче підключення.
             // Використовуємо збережений пароль з вибраного об'єкта.
-            // Його потрібно дешифрувати перед використанням для підключення.
-            // TODO: Додати метод дешифрування в ConnectionConfigManager, який приймає зашифрований рядок.
-            // Наразі, якщо selectedConnection.getPassword() повертає зашифрований пароль,
-            // його потрібно дешифрувати перед передачею в testDatabaseConnection.
-            // Припустимо, що ConnectionDetails зберігає ЗАШИФРОВАНИЙ пароль.
-            // Нам потрібен доступ до методу дешифрування з ConnectionConfigManager.
-            // Можна передати ConnectionConfigManager в цей метод або зробити метод дешифрування публічним.
-            // Або, краще, створити окремий сервіс для роботи з підключеннями, який має доступ до менеджера конфігурацій.
+            // Цей пароль ЗАШИФРОВАНИЙ в об'єкті ConnectionDetails.
+            // Нам потрібно його дешифрувати перед використанням.
+            passwordToUseForTest = configManager.decrypt(selectedConnection.getPassword()); // Дешифруємо збережений пароль
 
-            // Тимчасове рішення (потребує доступу до дешифратора):
-            // passwordToUseForTest = configManager.decrypt(selectedConnection.getPassword()); // Припустимо, що decrypt публічний або доступний
-
-            // Більш правильне рішення: отримати дешифрований пароль з об'єкта,
-            // якщо він був дешифрований при завантаженні. Або дешифрувати тут.
-            // Якщо ConnectionDetails зберігає дешифрований пароль після loadConnections:
-            passwordToUseForTest = configManager.decrypt(selectedConnection.getPassword()); // Якщо ConnectionDetails зберігає дешифрований пароль
-
-            // Якщо ConnectionDetails зберігає зашифрований пароль і дешифрування відбувається тільки в loadConnections:
-            // Потрібно або дешифрувати тут, або змінити логіку зберігання/завантаження.
-            // Давайте припустимо, що ConnectionDetails зберігає дешифрований пароль після завантаження.
             if (passwordToUseForTest == null || passwordToUseForTest.isEmpty()) {
-                showAlert(AlertType.WARNING, "Тест підключення", "Немає пароля.", "Пароль для вибраного підключення відсутній або недійсний.");
+                showAlert(AlertType.WARNING, "Тест підключення", "Немає пароля.", "Пароль для вибраного підключення відсутній або недійсний після дешифрування.");
                 return;
             }
-
 
         } else {
             // Поле пароля порожнє І немає вибраного підключення - пароля немає
