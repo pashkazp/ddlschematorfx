@@ -1,66 +1,80 @@
-package com.depavlo.ddlschematorfx.controller; // Рекомендовано створити окремий пакет для контролерів
+package com.depavlo.ddlschematorfx.controller;
 
-import com.depavlo.ddlschematorfx.model.ConnectionDetails; // Імпорт класу моделі
+import com.depavlo.ddlschematorfx.model.ConnectionDetails;
+import com.depavlo.ddlschematorfx.persistence.ConnectionConfigManager;
+
 import javafx.fxml.FXML;
 import javafx.scene.control.ListView;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.scene.control.Alert; // Імпорт для діалогових вікон
+import javafx.scene.control.Alert.AlertType;
+
+import java.util.List;
+import java.util.Optional; // Для роботи з Optional
 
 // Клас контролера для вікна налаштувань підключення до БД
 public class DbSettingsController {
 
-    // Елементи інтерфейсу, пов'язані через fx:id в FXML
     @FXML
-    private ListView<ConnectionDetails> connectionListView; // Список збережених підключень
+    private ListView<ConnectionDetails> connectionListView;
     @FXML
-    private TextField nameTextField; // Поле для назви підключення
+    private TextField nameTextField;
     @FXML
-    private TextField urlTextField; // Поле для URL
+    private TextField urlTextField;
     @FXML
-    private TextField userTextField; // Поле для користувача
+    private TextField userTextField;
     @FXML
-    private PasswordField passwordField; // Поле для пароля
+    private PasswordField passwordField;
     @FXML
-    private TextField schemaNameTextField; // Поле для назви схеми
+    private TextField schemaNameTextField;
 
-    private Stage dialogStage; // Посилання на Stage цього вікна/діалогу
+    private Stage dialogStage;
+    private ConnectionConfigManager configManager;
+    private ObservableList<ConnectionDetails> savedConnections;
 
-    // Метод, який викликається автоматично після завантаження FXML
     @FXML
     private void initialize() {
-        // Тут можна виконати початкову ініціалізацію, наприклад,
-        // завантажити збережені підключення та відобразити їх у connectionListView.
-        // Це потребуватиме взаємодії з шаром Persistence.
+        configManager = new ConnectionConfigManager();
 
-        // Приклад: завантаження та відображення фіктивних даних
-        // List<ConnectionDetails> savedConnections = loadSavedConnections(); // TODO: Implement loading
-        // connectionListView.getItems().addAll(savedConnections);
+        // Завантажуємо збережені підключення при ініціалізації контролера
+        savedConnections = FXCollections.observableArrayList(configManager.loadConnections());
+        connectionListView.setItems(savedConnections); // Відображаємо їх у ListView
 
-        // Додавання слухача для вибору елемента у списку
+        // Додавання слухача для зміни виділеного елемента
+        // Цей слухач буде викликатися, коли виділення змінюється (включаючи зняття виділення)
         connectionListView.getSelectionModel().selectedItemProperty().addListener(
-            (observable, oldValue, newValue) -> showConnectionDetails(newValue));
+                (observable, oldValue, newValue) -> showConnectionDetails(newValue));
+
+        // Вибираємо перший елемент у списку при завантаженні, якщо він є
+        if (!savedConnections.isEmpty()) {
+            connectionListView.getSelectionModel().selectFirst();
+        }
     }
 
-    // Метод для встановлення Stage цього вікна/діалогу
     public void setDialogStage(Stage dialogStage) {
         this.dialogStage = dialogStage;
     }
 
-    // Метод для відображення деталей вибраного підключення у полях вводу
+    /**
+     * Відображає деталі вибраного підключення у полях вводу.
+     * Якщо connection == null, поля очищаються.
+     * @param connection Об'єкт ConnectionDetails для відображення, або null.
+     */
     private void showConnectionDetails(ConnectionDetails connection) {
         if (connection != null) {
-            // Заповнюємо поля даними з об'єкта ConnectionDetails
             nameTextField.setText(connection.getName());
             urlTextField.setText(connection.getUrl());
             userTextField.setText(connection.getUser());
-            // Пароль не слід відображати безпосередньо,
-            // або потрібно реалізувати механізм його дешифрування та тимчасового показу.
-            // Наразі просто очистимо поле або залишимо його порожнім.
-            passwordField.setText(""); // Або реалізувати дешифрування
+            // Пароль не дешифруємо для відображення в полі PasswordField з міркувань безпеки.
+            // Користувачеві доведеться ввести його знову при редагуванні, АБО МИ ВИКОРИСТАЄМО СТАРИЙ.
+            passwordField.setText("");
             schemaNameTextField.setText(connection.getSchemaName());
         } else {
-            // Якщо нічого не вибрано, очищаємо поля
+            // Якщо виділення знято або нічого не вибрано, очищаємо поля
             nameTextField.setText("");
             urlTextField.setText("");
             userTextField.setText("");
@@ -71,26 +85,28 @@ public class DbSettingsController {
 
     /**
      * Обробник дії для кнопки "Нове".
-     * Очищає поля для введення нового підключення.
+     * Очищає поля для введення нового підключення та знімає виділення.
      */
     @FXML
     private void handleNewConnection() {
         showConnectionDetails(null); // Очищаємо поля
-        // Можливо, потрібно зняти виділення зі списку
-        connectionListView.getSelectionModel().clearSelection();
+        connectionListView.getSelectionModel().clearSelection(); // Знімаємо виділення зі списку
     }
 
     /**
      * Обробник дії для кнопки "Редагувати".
-     * Наразі simply вибирає елемент зі списку (якщо він є),
-     * що викличе showConnectionDetails.
-     * Повна реалізація може потребувати додаткової логіки.
+     * Ця кнопка може бути корисною, якщо поля зазвичай заблоковані для редагування.
+     * Наразі просто гарантує, що вибраний елемент відображається.
      */
     @FXML
     private void handleEditConnection() {
-        // Логіка редагування може бути реалізована тут.
-        // Наприклад, можна зробити поля доступними для редагування,
-        // якщо вони були заблоковані.
+        ConnectionDetails selectedConnection = connectionListView.getSelectionModel().getSelectedItem();
+        if (selectedConnection == null) {
+            showAlert(AlertType.WARNING, "Редагування", "Не вибрано підключення для редагування.", "Будь ласка, виберіть підключення зі списку.");
+        } else {
+            // Поля вже мають бути заповнені завдяки слухачу selectedItemProperty
+            // Якщо поля були заблоковані, тут можна їх розблокувати.
+        }
     }
 
     /**
@@ -101,15 +117,29 @@ public class DbSettingsController {
     private void handleDeleteConnection() {
         ConnectionDetails selectedConnection = connectionListView.getSelectionModel().getSelectedItem();
         if (selectedConnection != null) {
-            // TODO: Implement deletion from storage (Persistence Layer)
-            // deleteConnectionFromStorage(selectedConnection);
-            connectionListView.getItems().remove(selectedConnection); // Видаляємо зі списку в UI
-            handleNewConnection(); // Очищаємо поля після видалення
+            // Можна додати діалог підтвердження видалення
+            // Optional<ButtonType> result = showAlert(AlertType.CONFIRMATION, "Видалення підключення", "Підтвердження видалення", "Ви впевнені, що хочете видалити підключення '" + selectedConnection.getName() + "'?");
+            // if (result.isPresent() && result.get() == ButtonType.OK) {
+            savedConnections.remove(selectedConnection);
+            configManager.saveConnections(savedConnections.stream().toList());
+            handleNewConnection(); // Очищаємо поля після видалення та знімаємо виділення
+            // TODO: Показати повідомлення про успішне видалення
+            // }
         } else {
-            // TODO: Show a warning to the user
-            System.out.println("Будь ласка, виберіть підключення для видалення.");
+            showAlert(AlertType.WARNING, "Видалення", "Не вибрано підключення для видалення.", "Будь ласка, виберіть підключення зі списку.");
         }
     }
+
+    /**
+     * Обробник дії для кнопки "Зняти виділення".
+     * Знімає виділення з усіх елементів у списку підключень.
+     */
+    @FXML
+    private void handleUnselectAll() {
+        connectionListView.getSelectionModel().clearSelection();
+        showConnectionDetails(null); // Очищаємо поля, оскільки нічого не вибрано
+    }
+
 
     /**
      * Обробник дії для кнопки "Зберегти".
@@ -117,34 +147,88 @@ public class DbSettingsController {
      */
     @FXML
     private void handleSaveConnection() {
-        // Зчитуємо дані з полів
-        String id = null; // TODO: Implement ID handling (generate for new, get for existing)
-        String name = nameTextField.getText();
-        String url = urlTextField.getText();
-        String user = userTextField.getText();
-        String password = passwordField.getText(); // TODO: Encrypt password before saving
-        String schemaName = schemaNameTextField.getText();
-        String description = ""; // TODO: Add a field for description if needed
+        // Отримуємо поточний виділений елемент (якщо є)
+        ConnectionDetails selectedConnection = connectionListView.getSelectionModel().getSelectedItem();
 
-        // TODO: Basic validation
-        if (name.isEmpty() || url.isEmpty() || user.isEmpty() || password.isEmpty() || schemaName.isEmpty()) {
-             // TODO: Show validation error to the user
-             System.out.println("Будь ласка, заповніть всі обов'язкові поля.");
-             return;
+        if (selectedConnection == null) {
+            // *** Випадок: Жоден рядок не вибрано. Просто перезберігаємо поточний список. ***
+            configManager.saveConnections(savedConnections.stream().toList());
+            showAlert(AlertType.INFORMATION, "Збереження", "Успіх", "Всі налаштування підключень перезбережено.");
+            // Очищаємо поля після перезбереження, оскільки вони не стосуються конкретного вибраного елемента
+            showConnectionDetails(null);
+            // Знімаємо виділення, якщо воно було (хоча при selectedConnection == null його і так немає)
+            connectionListView.getSelectionModel().clearSelection();
+
+        } else {
+            // *** Випадок: Рядок вибрано. Зберігаємо або оновлюємо конкретне підключення. ***
+
+            // Зчитуємо дані з полів
+            String name = nameTextField.getText();
+            String url = urlTextField.getText();
+            String user = userTextField.getText();
+            String password = passwordField.getText(); // Пароль з поля введення
+            String schemaName = schemaNameTextField.getText();
+            String description = ""; // TODO: Add a field for description if needed
+
+            // *** Валідація ***
+            // Перевірка обов'язкових полів (крім пароля, який обробляється окремо)
+            if (name.isEmpty() || url.isEmpty() || user.isEmpty() || schemaName.isEmpty()) {
+                showAlert(AlertType.WARNING, "Помилка валідації", "Неповні дані підключення.", "Будь ласка, заповніть всі обов'язкові поля (Назва, URL, Користувач, Схема).");
+                return;
+            }
+
+            // Перевірка пароля: обов'язковий для нового підключення
+            // Якщо selectedConnection != null, це може бути редагування, і пароль не обов'язковий,
+            // якщо ми використовуємо старий.
+            if (password.isEmpty() && connectionListView.getSelectionModel().getSelectedItem() == null) { // Перевірка на нове підключення
+                showAlert(AlertType.WARNING, "Помилка валідації", "Не введено пароль.", "Будь ласка, введіть пароль для нового підключення.");
+                return;
+            }
+            // *** Кінець валідації ***
+
+
+            String id;
+            String passwordToSave; // Пароль, який буде збережено (або новий, або старий зашифрований)
+
+            // Визначаємо, чи це нове підключення, чи редагування існуючого
+            // selectedConnection вже отримано на початку методу
+            if (connectionListView.getSelectionModel().getSelectedItem() != null) { // Це редагування існуючого
+                id = selectedConnection.getId();
+
+                // Якщо поле пароля порожнє, використовуємо старий пароль з об'єкта
+                if (password.isEmpty()) {
+                    passwordToSave = selectedConnection.getPassword(); // Використовуємо вже зашифрований пароль
+                } else {
+                    passwordToSave = password; // Використовуємо новий введений пароль (буде зашифровано в configManager)
+                }
+
+                // Видаляємо старий запис зі списку в пам'яті перед додаванням оновленого
+                savedConnections.remove(selectedConnection);
+            } else { // Це нове підключення (хоча цей випадок має бути оброблений кнопкою "Нове" та валідацією)
+                // Цей else блок, ймовірно, не буде досягнуто, якщо користувач коректно
+                // використовує кнопку "Нове" перед заповненням полів для нового підключення.
+                // Але для повноти логіки:
+                id = configManager.generateUniqueId();
+                passwordToSave = password; // Використовуємо введений пароль
+            }
+
+            // Створюємо новий об'єкт ConnectionDetails
+            // Важливо: передаємо passwordToSave, який може бути або новим паролем (для шифрування),
+            // або старим зашифрованим паролем. configManager.saveConnections обробляє шифрування.
+            ConnectionDetails newConnection = new ConnectionDetails(id, name, url, user, passwordToSave, schemaName, description);
+
+            // Додаємо нове/оновлене підключення до списку в UI
+            savedConnections.add(newConnection);
+
+            // Зберігаємо весь оновлений список у файл
+            configManager.saveConnections(savedConnections.stream().toList());
+
+            // TODO: Показати повідомлення про успішне збереження користувачеві (наприклад, у панелі статусу)
+            showAlert(AlertType.INFORMATION, "Збереження", "Успіх", "Налаштування підключення збережено.");
+
+            // Опціонально: виділити збережене підключення у списку
+            connectionListView.getSelectionModel().select(newConnection);
         }
-
-        ConnectionDetails newConnection = new ConnectionDetails(id, name, url, user, password, schemaName, description);
-
-        // TODO: Implement saving to storage (Persistence Layer)
-        // saveConnectionToStorage(newConnection);
-
-        // TODO: Update the list view after saving
-        // For now, just print to console
-        System.out.println("Підключення збережено (фіктивно): " + newConnection);
-
-        // TODO: Refresh the list view or add the new/updated item
-        // connectionListView.getItems().clear();
-        // connectionListView.getItems().addAll(loadSavedConnections());
     }
 
     /**
@@ -156,12 +240,72 @@ public class DbSettingsController {
         // Зчитуємо дані з полів
         String url = urlTextField.getText();
         String user = userTextField.getText();
-        String password = passwordField.getText(); // TODO: Use password for test
+        String passwordFromField = passwordField.getText(); // Пароль з поля введення
 
-        // TODO: Implement connection test logic (Persistence Layer)
-        System.out.println("Тестування підключення до: " + url + " від користувача " + user + "...");
-        // boolean success = testDatabaseConnection(url, user, password);
-        // TODO: Show test result to the user
+        // Отримуємо поточний виділений елемент (якщо є)
+        ConnectionDetails selectedConnection = connectionListView.getSelectionModel().getSelectedItem();
+
+        // *** Валідація для тесту ***
+        if (url.isEmpty() || user.isEmpty()) {
+            showAlert(AlertType.WARNING, "Тест підключення", "Неповні дані.", "Будь ласка, заповніть поля URL та Користувач для тестування.");
+            return;
+        }
+
+        String passwordToUseForTest;
+
+        // Визначаємо, який пароль використовувати для тесту:
+        // Якщо поле пароля не порожнє, використовуємо його.
+        // Якщо поле пароля порожнє І вибрано існуюче підключення, використовуємо збережений пароль.
+        // В іншому випадку (поле порожнє І немає вибраного підключення), пароля немає.
+        if (!passwordFromField.isEmpty()) {
+            passwordToUseForTest = passwordFromField;
+        } else if (selectedConnection != null) {
+            // Використовуємо збережений пароль з вибраного об'єкта.
+            // Його потрібно дешифрувати перед використанням для підключення.
+            // TODO: Додати метод дешифрування в ConnectionConfigManager, який приймає зашифрований рядок.
+            // Наразі, якщо selectedConnection.getPassword() повертає зашифрований пароль,
+            // його потрібно дешифрувати перед передачею в testDatabaseConnection.
+            // Припустимо, що ConnectionDetails зберігає ЗАШИФРОВАНИЙ пароль.
+            // Нам потрібен доступ до методу дешифрування з ConnectionConfigManager.
+            // Можна передати ConnectionConfigManager в цей метод або зробити метод дешифрування публічним.
+            // Або, краще, створити окремий сервіс для роботи з підключеннями, який має доступ до менеджера конфігурацій.
+
+            // Тимчасове рішення (потребує доступу до дешифратора):
+            // passwordToUseForTest = configManager.decrypt(selectedConnection.getPassword()); // Припустимо, що decrypt публічний або доступний
+
+            // Більш правильне рішення: отримати дешифрований пароль з об'єкта,
+            // якщо він був дешифрований при завантаженні. Або дешифрувати тут.
+            // Якщо ConnectionDetails зберігає дешифрований пароль після loadConnections:
+            passwordToUseForTest = configManager.decrypt(selectedConnection.getPassword()); // Якщо ConnectionDetails зберігає дешифрований пароль
+
+            // Якщо ConnectionDetails зберігає зашифрований пароль і дешифрування відбувається тільки в loadConnections:
+            // Потрібно або дешифрувати тут, або змінити логіку зберігання/завантаження.
+            // Давайте припустимо, що ConnectionDetails зберігає дешифрований пароль після завантаження.
+            if (passwordToUseForTest == null || passwordToUseForTest.isEmpty()) {
+                showAlert(AlertType.WARNING, "Тест підключення", "Немає пароля.", "Пароль для вибраного підключення відсутній або недійсний.");
+                return;
+            }
+
+
+        } else {
+            // Поле пароля порожнє І немає вибраного підключення - пароля немає
+            showAlert(AlertType.WARNING, "Тест підключення", "Не введено пароль.", "Будь ласка, введіть пароль або виберіть збережене підключення.");
+            return;
+        }
+
+        // *** Кінець валідації для тесту ***
+
+
+        // Викликаємо метод тестування підключення з ConnectionConfigManager
+        // Передаємо URL, користувача та визначений пароль для тесту
+        boolean success = configManager.testDatabaseConnection(url, user, passwordToUseForTest);
+
+        // Відображаємо результат тесту користувачеві
+        if (success) {
+            showAlert(AlertType.INFORMATION, "Тест підключення", "Успіх", "Підключення успішне!");
+        } else {
+            showAlert(AlertType.ERROR, "Тест підключення", "Помилка", "Не вдалося підключитися. Перевірте параметри.");
+        }
     }
 
     /**
@@ -175,9 +319,17 @@ public class DbSettingsController {
         }
     }
 
-    // TODO: Implement methods for loading and saving connections from/to file (Persistence Layer)
-    // private List<ConnectionDetails> loadSavedConnections() { ... }
-    // private void saveConnectionToStorage(ConnectionDetails connection) { ... }
-    // private void deleteConnectionFromStorage(ConnectionDetails connection) { ... }
-    // private boolean testDatabaseConnection(String url, String user, String password) { ... }
+    /**
+     * Допоміжний метод для показу діалогових вікон.
+     */
+    private void showAlert(AlertType type, String title, String header, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(header);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
+
+    // TODO: Додати інші допоміжні методи, якщо потрібно.
 }

@@ -27,7 +27,7 @@
                     <Insets top="5.0" />
                 </VBox.margin>
                 <children>
-                    <Button mnemonicParsing="false" onAction="#handleNewConnection" text="Нове" /> <Button mnemonicParsing="false" onAction="#handleEditConnection" text="Редагувати" /> <Button mnemonicParsing="false" onAction="#handleDeleteConnection" text="Видалити" /> </children>
+                    <Button mnemonicParsing="false" onAction="#handleNewConnection" text="Нове" /> <Button mnemonicParsing="false" onAction="#handleEditConnection" text="Редагувати" /> <Button mnemonicParsing="false" onAction="#handleDeleteConnection" text="Видалити" /> <Button mnemonicParsing="false" onAction="#handleUnselectAll" text="Зняти виділення" /> </children>
             </HBox>
             <Label text="Деталі підключення" VBox.vgrow="ALWAYS">
                 <VBox.margin>
