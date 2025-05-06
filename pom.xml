@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
+   <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.depavlo</groupId>
-    <artifactId>ddl-schematorfx</artifactId>
-    <version>0.1</version>
+   <groupId>com.depavlo</groupId>
+   <artifactId>ddl-schematorfx</artifactId>
+   <version>0.1</version>
 
-    <properties>
+   <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -22,9 +22,16 @@
 
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
         <maven-shade-plugin.version>3.5.1</maven-shade-plugin.version>
-        <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version> </properties>
+        <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
+        <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
+    </properties>
 
-    <dependencies>
+   <dependencies>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -37,6 +44,18 @@
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>linux</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
             <classifier>linux</classifier>
@@ -46,6 +65,19 @@
             <artifactId>javafx-fxml</artifactId>
             <version>${javafx.version}</version>
             <classifier>linux</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>linux</classifier>
+        </dependency>
+
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>win</classifier>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
@@ -56,6 +88,12 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>win</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
             <classifier>win</classifier>
         </dependency>
@@ -111,7 +149,7 @@
 
     </dependencies>
 
-    <build>
+   <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -128,20 +166,52 @@
                 <version>${exec-maven-plugin.version}</version>
                 <executions>
                     <execution>
+                        <id>run-without-debug</id>
                         <goals>
                             <goal>java</goal>
                         </goals>
+                        <configuration>
+                            <mainClass>com.depavlo.ddlschematorfx.MainApp</mainClass>
+                            <workingDirectory>${project.build.directory}/classes</workingDirectory>
+                            <arguments>
+                                <argument>--module-path</argument>
+                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-linux.jar</argument>
+                                <argument>--add-modules</argument>
+                                <argument>javafx.controls,javafx.fxml,javafx.base,javafx.graphics</argument>
+                            </arguments>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <mainClass>com.depavlo.ddlschematorfx.MainApp</mainClass> <workingDirectory>${project.build.directory}/classes</workingDirectory> <executable>java</executable> <arguments>
-                    <argument>--module-path</argument>
-                    <argument>${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/${javafx-controls-${javafx.version}-${classifier}.jar}:${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/${javafx-fxml-${javafx.version}-${classifier}.jar}</argument>
-                    <argument>--add-modules</argument>
-                    <argument>javafx.controls,javafx.fxml</argument>
-                </arguments>
-                </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>${maven-antrun-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>run-with-debug</id>
+                        <phase>test-compile</phase> <goals>
+                        <goal>run</goal>
+                    </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Running application with debug enabled on port 5005"/>
+                                <java classname="com.depavlo.ddlschematorfx.MainApp" fork="true">
+                                    <classpath>
+                                        <path refid="maven.runtime.classpath"/>
+                                    </classpath>
+                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"/> <jvmarg value="--module-path"/>
+                                    <jvmarg value="${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-linux.jar"/>
+                                    <jvmarg value="--add-modules"/>
+                                    <jvmarg value="javafx.controls,javafx.fxml,javafx.base,javafx.graphics"/>
+                                </java>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
