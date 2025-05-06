@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-   <modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-   <groupId>com.depavlo</groupId>
-   <artifactId>ddl-schematorfx</artifactId>
-   <version>0.1</version>
+    <groupId>com.depavlo</groupId>
+    <artifactId>ddl-schematorfx</artifactId>
+    <version>0.1</version>
 
-   <properties>
+    <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -26,7 +26,7 @@
         <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
     </properties>
 
-   <dependencies>
+    <dependencies>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-base</artifactId>
@@ -96,6 +96,30 @@
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
             <classifier>win</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>mac</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>mac</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>mac</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>mac</classifier>
         </dependency>
 
 
@@ -149,7 +173,7 @@
 
     </dependencies>
 
-   <build>
+    <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -175,7 +199,7 @@
                             <workingDirectory>${project.build.directory}/classes</workingDirectory>
                             <arguments>
                                 <argument>--module-path</argument>
-                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-linux.jar</argument>
+                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-${os.detected.classifier}.jar</argument>
                                 <argument>--add-modules</argument>
                                 <argument>javafx.controls,javafx.fxml,javafx.base,javafx.graphics</argument>
                             </arguments>
@@ -191,18 +215,36 @@
                 <executions>
                     <execution>
                         <id>run-with-debug</id>
-                        <phase>test-compile</phase> <goals>
-                        <goal>run</goal>
-                    </goals>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
                         <configuration>
                             <target>
                                 <echo message="Running application with debug enabled on port 5005"/>
+
+                                <condition property="javafx.os.classifier" value="win">
+                                    <os family="windows"/>
+                                </condition>
+                                <condition property="javafx.os.classifier" value="mac">
+                                    <os family="mac"/>
+                                </condition>
+                                <condition property="javafx.os.classifier" value="linux">
+                                    <os family="unix"/>
+                                </condition>
+                                <path id="javafx.module.path">
+                                    <pathelement location="${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-${javafx.os.classifier}.jar"/>
+                                    <pathelement location="${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-${javafx.os.classifier}.jar"/>
+                                    <pathelement location="${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-${javafx.os.classifier}.jar"/>
+                                    <pathelement location="${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-${javafx.os.classifier}.jar"/>
+                                </path>
+
                                 <java classname="com.depavlo.ddlschematorfx.MainApp" fork="true">
                                     <classpath>
                                         <path refid="maven.runtime.classpath"/>
                                     </classpath>
-                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"/> <jvmarg value="--module-path"/>
-                                    <jvmarg value="${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-linux.jar:${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-linux.jar"/>
+                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"/> <jvmarg value="--module-path"/>
+                                    <jvmarg pathref="javafx.module.path"/>
                                     <jvmarg value="--add-modules"/>
                                     <jvmarg value="javafx.controls,javafx.fxml,javafx.base,javafx.graphics"/>
                                 </java>
