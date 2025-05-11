@@ -247,7 +247,7 @@
                                     <classpath>
                                         <path refid="maven.runtime.classpath"/>
                                     </classpath>
-                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"/> <jvmarg value="--module-path"/>
+                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"/> <jvmarg value="-Dfile.encoding=UTF-8"/> <jvmarg value="--module-path"/>
                                     <jvmarg pathref="javafx.module.path"/>
                                     <jvmarg value="--add-modules"/>
                                     <jvmarg value="javafx.controls,javafx.fxml,javafx.base,javafx.graphics"/>
