@@ -11,13 +11,15 @@ public class Schema {
     // Мапа, де ключ - унікальний ідентифікатор об'єкта (наприклад, ТИП/ВЛАСНИК/ІМ'Я), а значення - його DDL
     private Map<String, String> objectDdls;
     private LocalDateTime extractionTimestamp; // Час витягнення схеми
+    private ConnectionDetails sourceConnection; // Додано поле для збереження деталей підключення-джерела
 
     // Конструктор
-    public Schema(String id, String name, Map<String, String> objectDdls, LocalDateTime extractionTimestamp) {
+    public Schema(String id, String name, Map<String, String> objectDdls, LocalDateTime extractionTimestamp, ConnectionDetails sourceConnection) {
         this.id = id;
         this.name = name;
         this.objectDdls = objectDdls;
         this.extractionTimestamp = extractionTimestamp;
+        this.sourceConnection = sourceConnection; // Ініціалізуємо нове поле
     }
 
     // Гетери
@@ -37,21 +39,27 @@ public class Schema {
         return extractionTimestamp;
     }
 
+    public ConnectionDetails getSourceConnection() { // Додано гетер для sourceConnection
+        return sourceConnection;
+    }
+
     // Сетери (якщо потрібні, але для незмінних об'єктів краще їх уникати)
     // public void setId(String id) { this.id = id; }
     // public void setName(String name) { this.name = name; }
     // public void setObjectDdls(Map<String, String> objectDdls) { this.objectDdls = objectDdls; }
     // public void setExtractionTimestamp(LocalDateTime extractionTimestamp) { this.extractionTimestamp = extractionTimestamp; }
+    // public void setSourceConnection(ConnectionDetails sourceConnection) { this.sourceConnection = sourceConnection; }
 
 
     @Override
     public String toString() {
         return "Schema{" +
-               "id='" + id + '\'' +
-               ", name='" + name + '\'' +
-               ", objectCount=" + (objectDdls != null ? objectDdls.size() : 0) +
-               ", extractionTimestamp=" + extractionTimestamp +
-               '}';
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", objectCount=" + (objectDdls != null ? objectDdls.size() : 0) +
+                ", extractionTimestamp=" + extractionTimestamp +
+                ", sourceConnectionName='" + (sourceConnection != null ? sourceConnection.getName() : "N/A") + '\'' + // Додано назву підключення в toString
+                '}';
     }
 
     // Методи equals та hashCode для порівняння об'єктів Schema за їх ID

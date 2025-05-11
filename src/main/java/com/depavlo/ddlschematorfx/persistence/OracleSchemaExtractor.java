@@ -7,7 +7,7 @@ import com.depavlo.ddlschematorfx.model.ObjectType;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement; // Імпорт PreparedStatement
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -117,8 +117,8 @@ public class OracleSchemaExtractor {
             // Фіксуємо час витягнення
             LocalDateTime extractionTimestamp = LocalDateTime.now();
 
-            // Створюємо та повертаємо об'єкт Schema
-            return new Schema(schemaId, schemaName, objectDdls, extractionTimestamp);
+            // Створюємо та повертаємо об'єкт Schema, передаючи details підключення
+            return new Schema(schemaId, schemaName, objectDdls, extractionTimestamp, connectionDetails); // Передаємо ConnectionDetails
 
         } catch (SQLException e) {
             System.err.println("Помилка витягнення схеми: " + e.getMessage());

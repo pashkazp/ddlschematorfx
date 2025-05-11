@@ -19,11 +19,14 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell; // Імпорт ListCell
 import javafx.scene.control.ProgressIndicator; // Імпорт ProgressIndicator (якщо додасте в FXML)
 import javafx.scene.layout.AnchorPane;
+import javafx.stage.DirectoryChooser; // Імпорт для вибору директорії
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.collections.FXCollections;
 
+import java.io.File; // Імпорт File
 import java.io.IOException;
+import java.net.URL; // Імпорт URL
 import java.sql.SQLException; // Імпорт SQLException
 import java.util.List;
 
@@ -52,11 +55,6 @@ public class MainWindowController {
         connectionComboBox.setButtonCell(new ConnectionDetailsListCell()); // Для відображення вибраного елемента
 
         // TODO: Додати слухач для ComboBox, якщо потрібно реагувати на вибір одразу
-
-        // Завантажуємо список підключень при ініціалізації вікна
-        // Цей виклик перенесено в setConnectionConfigManager, щоб завантаження відбувалося
-        // після того, як менеджер буде встановлено.
-        // loadConnectionsIntoComboBox();
     }
 
     // Сетери для передачі залежностей з MainApp
@@ -90,7 +88,7 @@ public class MainWindowController {
      */
     @FXML
     private void handleExit() {
-        Platform.exit(); // Завершує роботу JavaFX додатку
+        Platform.exit();
     }
 
     /**
@@ -102,23 +100,32 @@ public class MainWindowController {
         try {
             // Завантажуємо FXML файл вікна налаштувань
             FXMLLoader loader = new FXMLLoader();
-            // TODO: Використовувати окремий пакет для FXML файлів (наприклад, view)
-            loader.setLocation(getClass().getResource("/com/depavlo/ddlschematorfx/view/DbSettings.fxml")); // Переконайтеся, що шлях правильний
+            // Шлях до FXML файлу. Переконайтеся, що цей шлях правильний
+            String fxmlPath = "/com/depavlo/ddlschematorfx/view/DbSettings.fxml";
+            URL fxmlLocation = getClass().getResource(fxmlPath);
+
+            if (fxmlLocation == null) {
+                // Якщо ресурс не знайдено, показуємо помилку
+                showAlert(AlertType.ERROR, "Помилка завантаження FXML", "Ресурс не знайдено", "Не вдалося знайти FXML файл: " + fxmlPath + "\nПеревірте шлях та наявність файлу у директорії ресурсів.");
+                return; // Зупиняємо виконання методу
+            }
+
+            loader.setLocation(fxmlLocation);
 
             AnchorPane page = loader.load();
 
             // Створюємо нове вікно (Stage) для діалогу
             Stage dialogStage = new Stage();
             dialogStage.setTitle("Налаштування підключень до БД");
-            dialogStage.initModality(Modality.WINDOW_MODAL); // Робимо вікно модальним
-            dialogStage.initOwner(primaryStage); // Встановлюємо головне вікно як власника
+            dialogStage.initModality(Modality.WINDOW_MODAL);
+            dialogStage.initOwner(primaryStage);
             Scene scene = new Scene(page);
             dialogStage.setScene(scene);
 
             // Передаємо залежності до контролера вікна налаштувань
             DbSettingsController controller = loader.getController();
             controller.setDialogStage(dialogStage);
-            controller.setConnectionConfigManager(connectionConfigManager); // Передаємо ConnectionConfigManager
+            controller.setConnectionConfigManager(connectionConfigManager);
 
             // Показуємо вікно та чекаємо, доки користувач його закриє
             dialogStage.showAndWait();
@@ -127,8 +134,8 @@ public class MainWindowController {
             loadConnectionsIntoComboBox();
 
         } catch (IOException e) {
-            e.printStackTrace(); // Обробка помилки завантаження FXML
-            showAlert(AlertType.ERROR, "Помилка", "Помилка завантаження вікна", "Не вдалося завантажити вікно налаштувань підключень.");
+            e.printStackTrace();
+            showAlert(AlertType.ERROR, "Помилка", "Помилка завантаження вікна", "Виникла помилка при завантаженні вікна налаштувань підключень: " + e.getMessage());
         }
     }
 
@@ -138,7 +145,7 @@ public class MainWindowController {
      */
     @FXML
     private void handleExtractSchema() {
-        ConnectionDetails selectedConnection = connectionComboBox.getSelectionModel().getSelectedItem();
+        final ConnectionDetails selectedConnection = connectionComboBox.getSelectionModel().getSelectedItem(); // Оголошено як final
 
         if (selectedConnection == null) {
             showAlert(AlertType.WARNING, "Витягнення схеми", "Не вибрано підключення.", "Будь ласка, виберіть підключення до бази даних зі списку.");
@@ -168,21 +175,19 @@ public class MainWindowController {
 
         // Налаштовуємо обробники подій для Task
         extractionTask.setOnSucceeded(event -> {
-            // Цей код виконується в потоці UI після успішного завершення Task
-            Schema extractedSchema = extractionTask.getValue();
+            final Schema extractedSchema = extractionTask.getValue(); // Оголошено як final
             schemaService.addSchema(extractedSchema); // Зберігаємо витягнуту схему в сервісі
 
             statusBarLabel.setText("Витягнення схеми завершено.");
             // if (progressIndicator != null) progressIndicator.setVisible(false);
             extractSchemaButton.setDisable(false); // Розблоковуємо кнопку
 
-            showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему витягнуто успішно!");
+            showAlert(AlertType.INFORMATION, "Витягнення схеми", "Усіх", "Схему витягнуто успішно!");
 
             // TODO: Можливо, автоматично перейти до вікна порівняння або відобразити деталі схеми
         });
 
         extractionTask.setOnFailed(event -> {
-            // Цей код виконується в потоці UI після невдалого завершення Task
             Throwable exception = extractionTask.getException();
             System.err.println("Помилка витягнення схеми: " + exception.getMessage());
             // TODO: Логування детальної помилки
@@ -195,10 +200,9 @@ public class MainWindowController {
         });
 
         extractionTask.setOnCancelled(event -> {
-            // Цей код виконується в потоці UI, якщо Task було скасовано
             statusBarLabel.setText("Витягнення схеми скасовано.");
             // if (progressIndicator != null) progressIndicator.setVisible(false);
-            extractSchemaButton.setDisable(false); // Розблоковуємо кнопку
+            extractSchemaButton.setDisable(false);
             showAlert(AlertType.WARNING, "Витягнення схеми", "Скасовано", "Операцію витягнення схеми скасовано.");
         });
 
@@ -207,6 +211,98 @@ public class MainWindowController {
 
         System.out.println("Запущено витягнення схеми для підключення: " + selectedConnection.getName());
     }
+
+    /**
+     * Обробник дії для пункту меню "Зберегти активну схему як...".
+     * Відкриває діалог вибору директорії та зберігає активну схему.
+     */
+    @FXML
+    private void handleSaveActiveSchema() {
+        // TODO: Визначити, яка схема є "активною".
+        // Наразі припустимо, що активна схема - це остання витягнута схема,
+        // яка зберігається в SchemaService. Можливо, потрібно додати логіку вибору схеми для збереження.
+
+        final List<Schema> loadedSchemas = schemaService.getAllSchemas(); // Оголошено як final
+        if (loadedSchemas.isEmpty()) {
+            showAlert(AlertType.WARNING, "Збереження схеми", "Немає схеми для збереження.", "Спочатку витягніть схему з бази даних.");
+            return;
+        }
+
+        // Припустимо, що ми зберігаємо останню витягнуту схему для простоти
+        final Schema schemaToSave = loadedSchemas.get(loadedSchemas.size() - 1); // Оголошено як final
+
+        // Отримуємо ConnectionDetails безпосередньо з об'єкта Schema
+        final ConnectionDetails sourceConnection = schemaToSave.getSourceConnection(); // Оголошено як final
+
+        if (sourceConnection == null) {
+            // Це може статися, якщо схема була завантажена не з БД, а з DDL файлу,
+            // або якщо логіка витягнення не зберегла sourceConnection в Schema.
+            // У такому випадку, можливо, варто запитати користувача назву директорії,
+            // або використовувати інший спосіб ідентифікації схеми.
+            showAlert(AlertType.WARNING, "Збереження схеми", "Немає інформації про джерело схеми.", "Не вдалося визначити підключення, з якого була витягнута схема. Збереження може використовувати лише назву схеми та час.");
+            // TODO: Вирішити, як формувати назву директорії, якщо sourceConnection відсутній
+            // Наразі, ми кинемо виняток у saveSchemaToFile, якщо sourceConnection == null
+            // Або можна передати null замість connectionName і обробити це в saveSchemaToFile.
+            // Давайте передамо null і обробимо в saveSchemaToFile.
+        }
+
+
+        // Відкриваємо діалог вибору директорії
+        DirectoryChooser directoryChooser = new DirectoryChooser();
+        directoryChooser.setTitle("Виберіть директорію для збереження схеми");
+
+        // Встановлюємо початкову директорію (опціонально)
+        // directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+
+        final File selectedDirectory = directoryChooser.showDialog(primaryStage); // Оголошено як final
+
+        if (selectedDirectory != null) {
+            // Користувач вибрав директорію
+            final String baseDirectoryPath = selectedDirectory.getAbsolutePath(); // Оголошено як final
+
+            // Запускаємо збереження схеми в окремому потоці
+            Task<Void> saveTask = new Task<>() {
+                @Override
+                protected Void call() throws Exception {
+                    // Викликаємо saveSchemaToFile, передаючи об'єкт Schema
+                    schemaService.saveSchemaToFile(schemaToSave, baseDirectoryPath); // Прибрано connectionNameForSchema
+                    return null;
+                }
+            };
+
+            saveTask.setOnSucceeded(event -> {
+                // Цей код виконується в потоці UI після успішного завершення Task
+                statusBarLabel.setText("Збереження схеми завершено.");
+                showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему успішно збережено!");
+            });
+
+            saveTask.setOnFailed(event -> {
+                // Цей код виконується в потоці UI після невдалого завершення Task
+                Throwable exception = saveTask.getException();
+                System.err.println("Помилка збереження схеми: " + exception.getMessage());
+                // TODO: Логування детальної помилки
+                statusBarLabel.setText("Помилка збереження схеми.");
+                showAlert(AlertType.ERROR, "Збереження схеми", "Помилка", "Не вдалося зберегти схему: " + exception.getMessage());
+            });
+
+            saveTask.setOnCancelled(event -> {
+                // Цей код виконується в потоці UI, якщо Task було скасовано
+                statusBarLabel.setText("Збереження схеми скасовано.");
+                showAlert(AlertType.WARNING, "Збереження схеми", "Скасовано", "Операцію збереження схеми скасовано.");
+            });
+
+
+            new Thread(saveTask).start();
+
+            System.out.println("Запущено збереження схеми '" + schemaToSave.getName() + "' у директорію: " + baseDirectoryPath);
+
+        } else {
+            // Користувач скасував діалог вибору директорії
+            System.out.println("Збереження схеми скасовано користувачем.");
+            statusBarLabel.setText("Збереження скасовано.");
+        }
+    }
+
 
     // TODO: Додати обробники для інших пунктів меню
     // TODO: Додати допоміжні методи для показу діалогових вікон (як у DbSettingsController)
