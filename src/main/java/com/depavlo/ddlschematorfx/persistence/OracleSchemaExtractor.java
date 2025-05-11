@@ -24,8 +24,9 @@ public class OracleSchemaExtractor {
     // Включаємо тільки дійсні об'єкти ('VALID')
     // Виключаємо послідовності, пов'язані з identity columns (імена починаються на 'ISEQ$$_')
     // %s буде замінено на список типів об'єктів у форматі 'TYPE1', 'TYPE2', ...
+    // Екрановано символ '%' у LIKE 'ISEQ$$_%%'
     private static final String GET_SCHEMA_OBJECTS_SQL_TEMPLATE =
-            "SELECT object_name, object_type FROM all_objects WHERE owner = ? AND object_type IN (%s) AND status = 'VALID' AND NOT (object_type = 'SEQUENCE' AND object_name LIKE 'ISEQ$$_%')"; // Додано виключення для ISEQ$$_
+            "SELECT object_name, object_type FROM all_objects WHERE owner = ? AND object_type IN (%s) AND status = 'VALID' AND NOT (object_type = 'SEQUENCE' AND object_name LIKE 'ISEQ$$_%%')"; // Екрановано '%'
 
     // Виклик функції DBMS_METADATA.GET_DDL
     // Параметри: object_type, name, schema, version, model, transform
