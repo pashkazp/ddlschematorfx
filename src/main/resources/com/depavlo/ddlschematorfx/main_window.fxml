@@ -19,6 +19,7 @@
                     <MenuItem mnemonicParsing="false" text="Налаштування підключень..." onAction="#handleDbSettings" />
                     <MenuItem mnemonicParsing="false" text="Налаштування GitLab..." />
                     <SeparatorMenuItem mnemonicParsing="false" />
+                    <MenuItem mnemonicParsing="false" text="Зберегти активну схему як..." onAction="#handleSaveActiveSchema" /> <SeparatorMenuItem mnemonicParsing="false" />
                     <MenuItem mnemonicParsing="false" text="Вихід" onAction="#handleExit" />
                 </items>
             </Menu>

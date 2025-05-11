@@ -222,17 +222,17 @@ public class MainWindowController {
         // Наразі припустимо, що активна схема - це остання витягнута схема,
         // яка зберігається в SchemaService. Можливо, потрібно додати логіку вибору схеми для збереження.
 
-        final List<Schema> loadedSchemas = schemaService.getAllSchemas(); // Оголошено як final
+        final List<Schema> loadedSchemas = schemaService.getAllSchemas();
         if (loadedSchemas.isEmpty()) {
             showAlert(AlertType.WARNING, "Збереження схеми", "Немає схеми для збереження.", "Спочатку витягніть схему з бази даних.");
             return;
         }
 
         // Припустимо, що ми зберігаємо останню витягнуту схему для простоти
-        final Schema schemaToSave = loadedSchemas.get(loadedSchemas.size() - 1); // Оголошено як final
+        final Schema schemaToSave = loadedSchemas.get(loadedSchemas.size() - 1);
 
         // Отримуємо ConnectionDetails безпосередньо з об'єкта Schema
-        final ConnectionDetails sourceConnection = schemaToSave.getSourceConnection(); // Оголошено як final
+        final ConnectionDetails sourceConnection = schemaToSave.getSourceConnection();
 
         if (sourceConnection == null) {
             // Це може статися, якщо схема була завантажена не з БД, а з DDL файлу,
@@ -254,18 +254,18 @@ public class MainWindowController {
         // Встановлюємо початкову директорію (опціонально)
         // directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
 
-        final File selectedDirectory = directoryChooser.showDialog(primaryStage); // Оголошено як final
+        final File selectedDirectory = directoryChooser.showDialog(primaryStage);
 
         if (selectedDirectory != null) {
             // Користувач вибрав директорію
-            final String baseDirectoryPath = selectedDirectory.getAbsolutePath(); // Оголошено як final
+            final String baseDirectoryPath = selectedDirectory.getAbsolutePath();
 
             // Запускаємо збереження схеми в окремому потоці
             Task<Void> saveTask = new Task<>() {
                 @Override
                 protected Void call() throws Exception {
                     // Викликаємо saveSchemaToFile, передаючи об'єкт Schema
-                    schemaService.saveSchemaToFile(schemaToSave, baseDirectoryPath); // Прибрано connectionNameForSchema
+                    schemaService.saveSchemaToFile(schemaToSave, baseDirectoryPath);
                     return null;
                 }
             };
