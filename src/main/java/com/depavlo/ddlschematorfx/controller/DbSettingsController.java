@@ -36,6 +36,22 @@ public class DbSettingsController {
     private ConnectionConfigManager configManager;
     private ObservableList<ConnectionDetails> savedConnections;
 
+    // Додайте цей метод до DbSettingsController.java
+    private ConnectionConfigManager connectionConfigManager; // Поле для менеджера
+
+    public void setConnectionConfigManager(ConnectionConfigManager connectionConfigManager) {
+        this.connectionConfigManager = connectionConfigManager;
+        // Після встановлення менеджера можна завантажити підключення
+        // Якщо логіка завантаження була в initialize, її потрібно перенести сюди
+        // або викликати loadConnections у initialize після перевірки connectionConfigManager на null
+        if (this.connectionConfigManager != null) {
+            savedConnections = FXCollections.observableArrayList(this.connectionConfigManager.loadConnections());
+            connectionListView.setItems(savedConnections);
+            if (!savedConnections.isEmpty()) {
+                connectionListView.getSelectionModel().selectFirst();
+            }
+        }
+    }
     @FXML
     private void initialize() {
         configManager = new ConnectionConfigManager();
