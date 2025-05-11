@@ -22,9 +22,10 @@ public class OracleSchemaExtractor {
     // SQL запит для отримання списку об'єктів схеми
     // Фільтруємо за власником (owner) та типом об'єкта (object_type)
     // Включаємо тільки дійсні об'єкти ('VALID')
+    // Виключаємо послідовності, пов'язані з identity columns (імена починаються на 'ISEQ$$_')
     // %s буде замінено на список типів об'єктів у форматі 'TYPE1', 'TYPE2', ...
     private static final String GET_SCHEMA_OBJECTS_SQL_TEMPLATE =
-            "SELECT object_name, object_type FROM all_objects WHERE owner = ? AND object_type IN (%s) AND status = 'VALID'";
+            "SELECT object_name, object_type FROM all_objects WHERE owner = ? AND object_type IN (%s) AND status = 'VALID' AND NOT (object_type = 'SEQUENCE' AND object_name LIKE 'ISEQ$$_%')"; // Додано виключення для ISEQ$$_
 
     // Виклик функції DBMS_METADATA.GET_DDL
     // Параметри: object_type, name, schema, version, model, transform
@@ -122,8 +123,8 @@ public class OracleSchemaExtractor {
             System.err.println("Помилка витягнення схеми: " + e.getMessage());
             throw e; // Перекидаємо виняток для обробки на вищому рівні
         } catch (Exception e) {
-            System.err.println("Невідома помилка при витягненні схеми: " + e.getMessage());
-            throw new SQLException("Невідома помилка при витягненні схеми", e); // Обгортаємо інші винятки
+             System.err.println("Невідома помилка при витягненні схеми: " + e.getMessage());
+             throw new SQLException("Невідома помилка при витягненні схеми", e); // Обгортаємо інші винятки
         }
     }
 
