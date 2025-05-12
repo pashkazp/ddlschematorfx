@@ -11,44 +11,47 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.control.ComboBox?>
 
-<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.depavlo.ddlschematorfx.controller.MainWindowController"> <top>
-    <MenuBar BorderPane.alignment="CENTER">
-        <menus>
-            <Menu mnemonicParsing="false" text="Файл">
-                <items>
-                    <MenuItem mnemonicParsing="false" text="Налаштування підключень..." onAction="#handleDbSettings" />
-                    <MenuItem mnemonicParsing="false" text="Налаштування GitLab..." />
-                    <SeparatorMenuItem mnemonicParsing="false" />
-                    <MenuItem mnemonicParsing="false" text="Зберегти активну схему як..." onAction="#handleSaveActiveSchema" /> <SeparatorMenuItem mnemonicParsing="false" />
-                    <MenuItem mnemonicParsing="false" text="Вихід" onAction="#handleExit" />
-                </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Схема">
-                <items>
-                    <MenuItem mnemonicParsing="false" text="Витягти схему з БД..." onAction="#handleExtractSchema" /> <MenuItem mnemonicParsing="false" text="Завантажити схему з DDL..." />
-                    <SeparatorMenuItem mnemonicParsing="false" />
-                    <MenuItem mnemonicParsing="false" text="Порівняти схеми..." />
-                </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Скрипти">
-                <items>
-                    <MenuItem mnemonicParsing="false" text="Згенерувати скрипти..." />
-                    <MenuItem mnemonicParsing="false" text="Застосувати скрипти..." />
-                </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Аудит">
-                <items>
-                    <MenuItem mnemonicParsing="false" text="Переглянути журнал аудиту..." />
-                </items>
-            </Menu>
-            <Menu mnemonicParsing="false" text="Довідка">
-                <items>
-                    <MenuItem mnemonicParsing="false" text="Про програму" />
-                </items>
-            </Menu>
-        </menus>
-    </MenuBar>
-</top>
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.depavlo.ddlschematorfx.controller.MainWindowController">
+    <top>
+        <MenuBar BorderPane.alignment="CENTER">
+            <menus>
+                <Menu mnemonicParsing="false" text="Файл">
+                    <items>
+                        <MenuItem mnemonicParsing="false" text="Налаштування підключень..." onAction="#handleDbSettings" />
+                        <MenuItem mnemonicParsing="false" text="Налаштування GitLab..." />
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem mnemonicParsing="false" text="Зберегти активну схему як..." onAction="#handleSaveActiveSchema" />
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem mnemonicParsing="false" text="Вихід" onAction="#handleExit" />
+                    </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="Схема">
+                    <items>
+                        <MenuItem mnemonicParsing="false" text="Витягти схему з БД..." onAction="#handleExtractSchema" />
+                        <MenuItem mnemonicParsing="false" text="Завантажити схему з DDL-директорії..." onAction="#handleLoadSchemaFromDirectory" />
+                        <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem mnemonicParsing="false" text="Порівняти схеми..." />
+                    </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="Скрипти">
+                    <items>
+                        <MenuItem mnemonicParsing="false" text="Згенерувати скрипти..." />
+                        <MenuItem mnemonicParsing="false" text="Застосувати скрипти..." />
+                    </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="Аудит">
+                    <items>
+                        <MenuItem mnemonicParsing="false" text="Переглянути журнал аудиту..." />
+                    </items>
+                </Menu>
+                <Menu mnemonicParsing="false" text="Довідка">
+                    <items>
+                        <MenuItem mnemonicParsing="false" text="Про програму" />
+                    </items>
+                </Menu>
+            </menus>
+        </MenuBar>
+    </top>
 
     <bottom>
         <Label fx:id="statusBarLabel" text="Готовий" BorderPane.alignment="BOTTOM_LEFT">
@@ -65,7 +68,9 @@
             </padding>
             <children>
                 <Label text="Виберіть підключення для витягнення схеми:" />
-                <ComboBox fx:id="connectionComboBox" prefWidth="200.0" promptText="Виберіть підключення" /> <Button fx:id="extractSchemaButton" mnemonicParsing="false" text="Витягти схему" onAction="#handleExtractSchema" /> </children>
+                <ComboBox fx:id="connectionComboBox" prefWidth="200.0" promptText="Виберіть підключення" />
+                <Button fx:id="extractSchemaButton" mnemonicParsing="false" text="Витягти схему" onAction="#handleExtractSchema" />
+            </children>
         </VBox>
     </center>
 
