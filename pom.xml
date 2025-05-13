@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.depavlo</groupId>
@@ -19,11 +21,12 @@
         <logback.version>1.4.14</logback.version>
         <oracle.jdbc.version>23.3.0.23.09</oracle.jdbc.version>
         <schemacrawler-oracle.version>16.25.3</schemacrawler-oracle.version>
-
+        <jsqlformatter.version>5.0</jsqlformatter.version>
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
         <maven-shade-plugin.version>3.5.1</maven-shade-plugin.version>
         <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
         <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
+        <jsqlparser.version>5.2</jsqlparser.version>
     </properties>
 
     <dependencies>
@@ -122,12 +125,17 @@
             <classifier>mac</classifier>
         </dependency>
 
-
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc11</artifactId>
             <version>${oracle.jdbc.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+            <version>${oracle.jdbc.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>us.fatehi</groupId>
             <artifactId>schemacrawler-oracle</artifactId>
@@ -171,10 +179,22 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.oracle.database.nls</groupId>
-            <artifactId>orai18n</artifactId>
-            <version>${oracle.jdbc.version}</version>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>${jsqlparser.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.manticore-projects.jsqlformatter</groupId>
+            <artifactId>jsqlformatter</artifactId>
+            <version>${jsqlformatter.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.github.jsqlparser</groupId>
+                    <artifactId>jsqlparser</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -203,7 +223,7 @@
                             <workingDirectory>${project.build.directory}/classes</workingDirectory>
                             <arguments>
                                 <argument>--module-path</argument>
-                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-${os.detected.classifier}.jar</argument>
+                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-${os.detected.classifier}.jar</argument>
                                 <argument>--add-modules</argument>
                                 <argument>javafx.controls,javafx.fxml,javafx.base,javafx.graphics</argument>
                             </arguments>
@@ -247,7 +267,9 @@
                                     <classpath>
                                         <path refid="maven.runtime.classpath"/>
                                     </classpath>
-                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"/> <jvmarg value="-Dfile.encoding=UTF-8"/> <jvmarg value="--module-path"/>
+                                    <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"/>
+                                    <jvmarg value="-Dfile.encoding=UTF-8"/>
+                                    <jvmarg value="--module-path"/>
                                     <jvmarg pathref="javafx.module.path"/>
                                     <jvmarg value="--add-modules"/>
                                     <jvmarg value="javafx.controls,javafx.fxml,javafx.base,javafx.graphics"/>
@@ -257,7 +279,6 @@
                     </execution>
                 </executions>
             </plugin>
-
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

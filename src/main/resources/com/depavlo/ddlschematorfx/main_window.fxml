@@ -30,7 +30,7 @@
                         <MenuItem mnemonicParsing="false" text="Витягти схему з БД..." onAction="#handleExtractSchema" />
                         <MenuItem mnemonicParsing="false" text="Завантажити схему з DDL-директорії..." onAction="#handleLoadSchemaFromDirectory" />
                         <SeparatorMenuItem mnemonicParsing="false" />
-                        <MenuItem mnemonicParsing="false" text="Порівняти схеми..." />
+                        <MenuItem fx:id="compareSchemasMenuItem" mnemonicParsing="false" text="Порівняти схеми..." onAction="#handleCompareSchemas" />
                     </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Скрипти">

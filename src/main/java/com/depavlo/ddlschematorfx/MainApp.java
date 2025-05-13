@@ -1,8 +1,9 @@
 package com.depavlo.ddlschematorfx;
 
-import com.depavlo.ddlschematorfx.controller.MainWindowController; // Імпорт контролера головного вікна
-import com.depavlo.ddlschematorfx.persistence.ConnectionConfigManager; // Імпорт менеджера конфігурацій
-import com.depavlo.ddlschematorfx.service.SchemaService; // Імпорт сервісу схем
+import com.depavlo.ddlschematorfx.controller.MainWindowController;
+import com.depavlo.ddlschematorfx.persistence.ConnectionConfigManager;
+import com.depavlo.ddlschematorfx.service.SchemaComparisonService; // Імпорт нового сервісу
+import com.depavlo.ddlschematorfx.service.SchemaService;
 
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
@@ -17,26 +18,23 @@ public class MainApp extends Application {
     // Створюємо екземпляри менеджерів та сервісів, які будуть доступні контролерам
     private final ConnectionConfigManager connectionConfigManager = new ConnectionConfigManager();
     private final SchemaService schemaService = new SchemaService();
-    // TODO: Додати інші менеджери/сервіси (GitLab, Audit тощо)
+    private final SchemaComparisonService schemaComparisonService = new SchemaComparisonService(); // Створюємо екземпляр
 
     @Override
     public void start(Stage primaryStage) throws IOException {
-        // Завантаження головного FXML файлу інтерфейсу.
-        FXMLLoader loader = new FXMLLoader(getClass().getResource("main_window.fxml")); // Переконайтеся, що шлях правильний
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("main_window.fxml"));
         Parent root = loader.load();
 
-        // Отримуємо контролер головного вікна
         MainWindowController mainWindowController = loader.getController();
 
-        // Передаємо залежності до контролера
-        mainWindowController.setPrimaryStage(primaryStage); // Передаємо головний Stage
-        mainWindowController.setConnectionConfigManager(connectionConfigManager); // Передаємо менеджер конфігурацій
-        mainWindowController.setSchemaService(schemaService); // Передаємо сервіс схем
-        // TODO: Передати інші залежності
+        mainWindowController.setPrimaryStage(primaryStage);
+        mainWindowController.setConnectionConfigManager(connectionConfigManager);
+        mainWindowController.setSchemaService(schemaService);
+        mainWindowController.setSchemaComparisonService(schemaComparisonService); // Передаємо новий сервіс
 
         Scene scene = new Scene(root);
 
-        primaryStage.setTitle("DDL Schema Sync"); // Заголовок вікна
+        primaryStage.setTitle("DDL Schema Sync");
         primaryStage.setScene(scene);
         primaryStage.show();
     }
