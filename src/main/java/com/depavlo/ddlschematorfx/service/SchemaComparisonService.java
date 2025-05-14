@@ -2,155 +2,108 @@ package com.depavlo.ddlschematorfx.service;
 
 import com.depavlo.ddlschematorfx.model.Difference;
 import com.depavlo.ddlschematorfx.model.DifferenceType;
-import com.depavlo.ddlschematorfx.model.ObjectType; // Потрібно буде створити цей enum, якщо його ще немає
+import com.depavlo.ddlschematorfx.model.ObjectType;
 import com.depavlo.ddlschematorfx.model.Schema;
-import com.manticore.jsqlformatter.JSQLFormatter; // Імпорт форматера
+import com.manticore.jsqlformatter.JSQLFormatter;
+import org.apache.commons.collections4.keyvalue.MultiKey; // Імпорт MultiKey
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.Map; // Для ітерації по entrySet
 
 public class SchemaComparisonService {
 
-    /**
-     * Порівнює дві схеми та повертає список відмінностей.
-     *
-     * @param sourceSchema Схема-джерело (наприклад, стара версія або схема з БД).
-     * @param targetSchema Цільова схема (наприклад, нова версія або схема з файлів).
-     * @return Список об'єктів Difference.
-     */
     public List<Difference> compareSchemas(Schema sourceSchema, Schema targetSchema) {
         if (sourceSchema == null || targetSchema == null) {
             throw new IllegalArgumentException("Source and target schemas cannot be null.");
         }
 
         List<Difference> differences = new ArrayList<>();
-        Map<String, String> sourceObjects = sourceSchema.getObjectDdls();
-        Map<String, String> targetObjects = targetSchema.getObjectDdls();
+        // Отримуємо MultiKeyMap з DDL об'єктів
+        Map<MultiKey<?>, String> sourceObjects = sourceSchema.getObjectDdls();
+        Map<MultiKey<?>, String> targetObjects = targetSchema.getObjectDdls();
 
-        // Використовуємо JSQLFormatter для нормалізації DDL перед порівнянням
-        // Налаштування форматера за замовчуванням
         JSQLFormatter formatter = new JSQLFormatter();
 
-        // Знаходимо об'єкти, які були видалені (є в source, але немає в target)
-        for (String sourceKey : sourceObjects.keySet()) {
-            if (!targetObjects.containsKey(sourceKey)) {
-                String[] keyParts = parseObjectKey(sourceKey);
-                if (keyParts != null) {
+        // Об'єкти, що є в source, але відсутні в target (REMOVED)
+        for (Map.Entry<MultiKey<?>, String> sourceEntry : sourceObjects.entrySet()) {
+            MultiKey<?> sourceMultiKey = sourceEntry.getKey();
+            if (!targetObjects.containsKey(sourceMultiKey)) {
+                if (sourceMultiKey.size() == 2 && sourceMultiKey.getKey(0) instanceof ObjectType && sourceMultiKey.getKey(1) instanceof String) {
+                    ObjectType objectType = (ObjectType) sourceMultiKey.getKey(0);
+                    String objectName = (String) sourceMultiKey.getKey(1);
                     differences.add(new Difference(
                             DifferenceType.REMOVED,
-                            getObjectTypeFromString(keyParts[0]),
-                            keyParts[2], // objectName
-                            keyParts[1], // objectOwner (schema name)
-                            sourceObjects.get(sourceKey),
+                            objectType,
+                            objectName,
+                            sourceSchema.getName(), // Власник схеми-джерела
+                            sourceEntry.getValue(),
                             null,
-                            "Object removed from target schema."
+                            "Object removed from target schema (Owner: " + sourceSchema.getName() + ")"
                     ));
                 }
             }
         }
 
-        // Знаходимо об'єкти, які були додані або змінені
-        for (String targetKey : targetObjects.keySet()) {
-            String[] keyParts = parseObjectKey(targetKey);
-            if (keyParts == null) continue; // Пропускаємо, якщо ключ некоректний
+        // Об'єкти, що є в target (ADDED або MODIFIED)
+        for (Map.Entry<MultiKey<?>, String> targetEntry : targetObjects.entrySet()) {
+            MultiKey<?> targetMultiKey = targetEntry.getKey();
+            String targetDdl = targetEntry.getValue();
 
-            String targetDdl = targetObjects.get(targetKey);
-            String formattedTargetDdl = "";
-            if (targetDdl != null && !targetDdl.trim().isEmpty()) {
-                 try {
-                    formattedTargetDdl = formatter.format(targetDdl);
-                } catch (Exception e) {
-                    System.err.println("Warning: Could not format target DDL for object " + targetKey + ". Using raw DDL. Error: " + e.getMessage());
-                    formattedTargetDdl = targetDdl; // Використовуємо "сирий" DDL у разі помилки форматування
-                }
-            }
+            if (targetMultiKey.size() == 2 && targetMultiKey.getKey(0) instanceof ObjectType && targetMultiKey.getKey(1) instanceof String) {
+                ObjectType objectType = (ObjectType) targetMultiKey.getKey(0);
+                String objectName = (String) targetMultiKey.getKey(1);
 
-
-            if (!sourceObjects.containsKey(targetKey)) {
-                // Об'єкт додано (є в target, але немає в source)
-                differences.add(new Difference(
-                        DifferenceType.ADDED,
-                        getObjectTypeFromString(keyParts[0]),
-                        keyParts[2], // objectName
-                        keyParts[1], // objectOwner (schema name)
-                        null,
-                        targetDdl, // Зберігаємо оригінальний DDL
-                        "Object added to target schema."
-                ));
-            } else {
-                // Об'єкт існує в обох схемах, перевіряємо на зміни
-                String sourceDdl = sourceObjects.get(targetKey);
-                String formattedSourceDdl = "";
-
-                if (sourceDdl != null && !sourceDdl.trim().isEmpty()) {
+                String formattedTargetDdl = "";
+                if (targetDdl != null && !targetDdl.trim().isEmpty()) {
                     try {
-                        formattedSourceDdl = formatter.format(sourceDdl);
+                        formattedTargetDdl = formatter.format(targetDdl);
                     } catch (Exception e) {
-                        System.err.println("Warning: Could not format source DDL for object " + targetKey + ". Using raw DDL. Error: " + e.getMessage());
-                        formattedSourceDdl = sourceDdl; // Використовуємо "сирий" DDL у разі помилки форматування
+                        System.err.println("Warning: Could not format target DDL for object " + objectType + "/" + objectName + ". Using raw DDL. Error: " + e.getMessage());
+                        formattedTargetDdl = targetDdl;
                     }
                 }
 
-                // Порівнюємо відформатовані DDL
-                if (!formattedSourceDdl.equals(formattedTargetDdl)) {
+                if (!sourceObjects.containsKey(targetMultiKey)) {
+                    // Об'єкт додано (є в target, але немає в source)
                     differences.add(new Difference(
-                            DifferenceType.MODIFIED,
-                            getObjectTypeFromString(keyParts[0]),
-                            keyParts[2], // objectName
-                            keyParts[1], // objectOwner (schema name)
-                            sourceDdl, // Зберігаємо оригінальний DDL
-                            targetDdl, // Зберігаємо оригінальний DDL
-                            "Object DDL has been modified."
-                            // TODO: В майбутньому можна додати більш детальний diff
+                            DifferenceType.ADDED,
+                            objectType,
+                            objectName,
+                            targetSchema.getName(), // Власник цільової схеми
+                            null,
+                            targetDdl,
+                            "Object added to target schema (Owner: " + targetSchema.getName() + ")"
                     ));
+                } else {
+                    // Об'єкт існує в обох схемах, перевіряємо на зміни
+                    String sourceDdl = sourceObjects.get(targetMultiKey);
+                    String formattedSourceDdl = "";
+                    if (sourceDdl != null && !sourceDdl.trim().isEmpty()) {
+                        try {
+                            formattedSourceDdl = formatter.format(sourceDdl);
+                        } catch (Exception e) {
+                            System.err.println("Warning: Could not format source DDL for object " + objectType + "/" + objectName + ". Using raw DDL. Error: " + e.getMessage());
+                            formattedSourceDdl = sourceDdl;
+                        }
+                    }
+
+                    if (!formattedSourceDdl.equals(formattedTargetDdl)) {
+                        differences.add(new Difference(
+                                DifferenceType.MODIFIED,
+                                objectType,
+                                objectName,
+                                targetSchema.getName(), // Або sourceSchema.getName(), залежно від логіки
+                                sourceDdl,
+                                targetDdl,
+                                "Object DDL has been modified (Compared owners: Source '" + sourceSchema.getName() + "', Target '" + targetSchema.getName() + "')"
+                        ));
+                    }
                 }
             }
         }
         return differences;
     }
-
-    /**
-     * Допоміжний метод для парсингу ключа об'єкта.
-     * Ключ має формат: ТИП_ОБЄКТУ/ВЛАСНИК_СХЕМИ/ІМЯ_ОБЄКТУ
-     * @param objectKey Ключ об'єкта.
-     * @return Масив рядків [тип, власник, ім'я] або null, якщо формат некоректний.
-     */
-    private String[] parseObjectKey(String objectKey) {
-        if (objectKey == null) return null;
-        String[] parts = objectKey.split("/", 3); // Ліміт 3, щоб ім'я об'єкта могло містити "/"
-        if (parts.length == 3) {
-            return parts;
-        }
-        System.err.println("Warning: Could not parse object key: " + objectKey + ". Expected format: TYPE/OWNER/NAME");
-        return null; // Або повернути масив з одним елементом, щоб уникнути NPE далі, але це менш чисто
-    }
-
-    /**
-     * Допоміжний метод для конвертації рядка типу об'єкта в enum ObjectType.
-     * @param objectTypeString Рядок типу об'єкта (наприклад, "TABLE", "VIEW").
-     * @return Відповідний ObjectType або ObjectType.OTHER, якщо тип не знайдено.
-     */
-    private ObjectType getObjectTypeFromString(String objectTypeString) {
-        if (objectTypeString == null) return ObjectType.OTHER;
-        try {
-            // Спроба прямого перетворення (якщо назви співпадають з enum константами)
-            // Можливо, потрібно буде замінити пробіли на підкреслення, якщо типи з БД містять пробіли
-            return ObjectType.valueOf(objectTypeString.toUpperCase().replace(" ", "_"));
-        } catch (IllegalArgumentException e) {
-            System.err.println("Warning: Unknown object type string: " + objectTypeString + ". Defaulting to OTHER.");
-            // Тут можна додати більш складну логіку мапінгу, якщо потрібно
-            // наприклад, "MATERIALIZED VIEW" -> ObjectType.MATERIALIZED_VIEW
-            if ("MATERIALIZED VIEW".equalsIgnoreCase(objectTypeString)) {
-                return ObjectType.MATERIALIZED_VIEW;
-            }
-            if ("DATABASE LINK".equalsIgnoreCase(objectTypeString)) {
-                return ObjectType.DATABASE_LINK;
-            }
-            // ... додати інші специфічні мапінги
-            return ObjectType.OTHER;
-        }
-    }
+    // Допоміжні методи parseObjectKey та getObjectTypeFromString тут більше не потрібні,
+    // оскільки ми працюємо безпосередньо з ObjectType та objectName з MultiKey.
 }

@@ -1,8 +1,9 @@
 package com.depavlo.ddlschematorfx.persistence;
 
 import com.depavlo.ddlschematorfx.model.ConnectionDetails;
-import com.depavlo.ddlschematorfx.model.Schema;
 import com.depavlo.ddlschematorfx.model.ObjectType;
+import com.depavlo.ddlschematorfx.model.Schema;
+import org.apache.commons.collections4.map.MultiKeyMap; // Імпорт MultiKeyMap
 
 import java.sql.CallableStatement;
 import java.sql.Connection;
@@ -20,125 +21,103 @@ import java.util.UUID;
 public class OracleSchemaExtractor {
 
     // SQL запит для отримання списку об'єктів схеми
-    // Фільтруємо за власником (owner) та типом об'єкта (object_type)
-    // Включаємо тільки дійсні об'єкти ('VALID')
-    // Виключаємо послідовності, пов'язані з identity columns (імена починаються на 'ISEQ$$_')
-    // %s буде замінено на список типів об'єктів у форматі 'TYPE1', 'TYPE2', ...
-    // Екрановано символ '%' у LIKE 'ISEQ$$_%%'
     private static final String GET_SCHEMA_OBJECTS_SQL_TEMPLATE =
-            "SELECT object_name, object_type FROM all_objects WHERE owner = ? AND object_type IN (%s) AND status = 'VALID' AND NOT (object_type = 'SEQUENCE' AND object_name LIKE 'ISEQ$$_%%')"; // Екрановано '%'
+            "SELECT object_name, object_type FROM all_objects WHERE owner = ? AND object_type IN (%s) AND status = 'VALID' AND NOT (object_type = 'SEQUENCE' AND object_name LIKE 'ISEQ$$_%%')";
 
     // Виклик функції DBMS_METADATA.GET_DDL
-    // Параметри: object_type, name, schema, version, model, transform
-    // TODO: Налаштувати параметри DBMS_METADATA для отримання повного DDL, включаючи специфічні для 21c можливості
     private static final String GET_DDL_SQL =
-            "{ ? = call DBMS_METADATA.GET_DDL(?, ?, ?) }"; // Повертає CLOB
-
-    // TODO: Додати SQL для налаштування NLS параметрів та Edition-Based Redefinition (EBR)
-    // private static final String SET_NLS_PARAMS_SQL = "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'";
-    // private static final String SET_EDITION_SQL = "ALTER SESSION SET EDITION = ?";
+            "{ ? = call DBMS_METADATA.GET_DDL(?, ?, ?) }";
 
 
     /**
      * Витягує структуру схеми з бази даних Oracle.
      * @param connectionDetails Деталі підключення до БД.
-     * @param schemaName Назва схеми (власник), яку потрібно витягти.
+     * @param schemaOwnerName Назва схеми (власник), яку потрібно витягти.
      * @return Об'єкт Schema з витягнутими DDL об'єктів.
      * @throws SQLException Якщо виникає помилка при роботі з БД.
      */
-    public Schema extractSchema(ConnectionDetails connectionDetails, String schemaName) throws SQLException {
-        // Перевірка вхідних параметрів
-        if (connectionDetails == null || schemaName == null || schemaName.trim().isEmpty()) {
-            throw new IllegalArgumentException("Connection details and schema name must be provided.");
+    public Schema extractSchema(ConnectionDetails connectionDetails, String schemaOwnerName) throws SQLException {
+        if (connectionDetails == null || schemaOwnerName == null || schemaOwnerName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Connection details and schema owner name must be provided.");
         }
 
-        // Використовуємо try-with-resources для автоматичного закриття Connection
+        // Ініціалізуємо MultiKeyMap для зберігання DDL
+        MultiKeyMap<Object, String> objectDdlsMap = new MultiKeyMap<>();
+
         try (Connection connection = DriverManager.getConnection(
                 connectionDetails.getUrl(),
                 connectionDetails.getUser(),
                 connectionDetails.getPassword())) {
 
             // TODO: Налаштування NLS параметрів та EBR, якщо необхідно
-            // try (Statement stmt = connection.createStatement()) {
-            //     stmt.execute(SET_NLS_PARAMS_SQL);
-            //     // Якщо використовується EBR, встановити відповідну Edition
-            //     // if (connectionDetails.getEdition() != null) { ... }
-            // } catch (SQLException e) {
-            //     System.err.println("Помилка налаштування сесії: " + e.getMessage());
-            //     // Продовжуємо, але логуємо попередження
-            // }
 
-            Map<String, String> objectDdls = new HashMap<>();
-
-            // Отримуємо список типів об'єктів, які ми хочемо витягти
-            // TODO: Винести список типів об'єктів у конфігурацію або параметр методу
-            // Використовуємо ObjectType.values() як приклад, але потрібно фільтрувати
-            // тільки ті типи, які підтримує DBMS_METADATA.GET_DDL та які ми хочемо порівнювати.
             ObjectType[] objectTypesToExtract = {
                     ObjectType.TABLE, ObjectType.VIEW, ObjectType.SEQUENCE,
                     ObjectType.PROCEDURE, ObjectType.FUNCTION, ObjectType.PACKAGE,
-                    ObjectType.TRIGGER, ObjectType.INDEX, ObjectType.CONSTRAINT,
+                    ObjectType.TRIGGER, ObjectType.INDEX, // CONSTRAINT обробляється через TABLE DDL або окремо
                     ObjectType.MATERIALIZED_VIEW, ObjectType.SYNONYM, ObjectType.DATABASE_LINK,
                     ObjectType.DIRECTORY_OBJECT, ObjectType.JOB, ObjectType.QUEUE,
                     ObjectType.TYPE, ObjectType.JAVA_SOURCE, ObjectType.LIBRARY,
                     ObjectType.SCHEDULER, ObjectType.XML_SCHEMA
-                    // TODO: Додати інші типи з ObjectType, якщо потрібно
+                    // CONSTRAINT часто є частиною DDL таблиці. Якщо потрібно окремо, додайте.
             };
 
-            // Формуємо рядок з типами об'єктів для SQL запиту
             String objectTypesSqlString = buildObjectTypesSqlString(objectTypesToExtract);
 
-            // Отримуємо список об'єктів схеми за типами
-            // Використовуємо PreparedStatement для передачі параметра owner
             try (PreparedStatement pstmt = connection.prepareStatement(String.format(GET_SCHEMA_OBJECTS_SQL_TEMPLATE, objectTypesSqlString))) {
-                pstmt.setString(1, schemaName.toUpperCase()); // Встановлюємо параметр owner
+                pstmt.setString(1, schemaOwnerName.toUpperCase());
 
                 try (ResultSet rs = pstmt.executeQuery()) {
-                    // Для кожного об'єкта отримуємо його DDL
                     while (rs.next()) {
                         String objectName = rs.getString("object_name");
-                        String objectType = rs.getString("object_type"); // Тип об'єкта як рядок з ALL_OBJECTS
+                        String objectTypeString = rs.getString("object_type"); // Тип об'єкта як рядок з ALL_OBJECTS
 
-                        // Отримуємо DDL для поточного об'єкта
-                        String ddl = getObjectDdl(connection, objectType, objectName, schemaName);
+                        ObjectType currentObjectType = getObjectTypeFromString(objectTypeString);
+                        if (currentObjectType == ObjectType.OTHER && !"CONSTRAINT".equals(objectTypeString)) { // Дозволяємо CONSTRAINT проходити, якщо він є в запиті
+                            System.out.println("Пропущено невідомий тип об'єкта: " + objectTypeString + " для " + objectName);
+                            continue;
+                        }
 
-                        // Зберігаємо DDL у мапу. Ключ: ТИП/ВЛАСНИК/ІМ'Я
-                        String objectKey = objectType + "/" + schemaName + "/" + objectName;
-                        objectDdls.put(objectKey, ddl);
 
-                        System.out.println("Витягнуто DDL для: " + objectKey); // Логування прогресу
+                        String ddl = getObjectDdl(connection, objectTypeString, objectName, schemaOwnerName);
+
+                        // Додаємо DDL до MultiKeyMap
+                        // Ключі: ObjectType enum та ім'я об'єкта (String)
+                        // Ім'я схеми-власника (schemaOwnerName) зберігається в самому об'єкті Schema
+                        if (ddl != null) { // Переконуємося, що DDL не null
+                            objectDdlsMap.put(currentObjectType, objectName, ddl);
+                            System.out.println("Витягнуто DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + ")");
+                        } else {
+                            System.out.println("Порожній DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + "). Пропущено.");
+                        }
                     }
                 }
             }
 
-
-            // Генеруємо унікальний ID для витягнутої схеми
             String schemaId = UUID.randomUUID().toString();
-            // Фіксуємо час витягнення
             LocalDateTime extractionTimestamp = LocalDateTime.now();
 
-            // Створюємо та повертаємо об'єкт Schema, передаючи details підключення
-            return new Schema(schemaId, schemaName, objectDdls, extractionTimestamp, connectionDetails); // Передаємо ConnectionDetails
+            // Створюємо та повертаємо об'єкт Schema
+            // schemaOwnerName - це ім'я схеми, яке ми витягуємо
+            return new Schema(schemaId, schemaOwnerName, objectDdlsMap, extractionTimestamp, connectionDetails);
 
         } catch (SQLException e) {
-            System.err.println("Помилка витягнення схеми: " + e.getMessage());
-            throw e; // Перекидаємо виняток для обробки на вищому рівні
+            System.err.println("Помилка витягнення схеми '" + schemaOwnerName + "': " + e.getMessage());
+            throw e;
         } catch (Exception e) {
-             System.err.println("Невідома помилка при витягненні схеми: " + e.getMessage());
-             throw new SQLException("Невідома помилка при витягненні схеми", e); // Обгортаємо інші винятки
+            System.err.println("Невідома помилка при витягненні схеми '" + schemaOwnerName + "': " + e.getMessage());
+            e.printStackTrace();
+            throw new SQLException("Невідома помилка при витягненні схеми", e);
         }
     }
 
-    /**
-     * Допоміжний метод для формування рядка з типами об'єктів для SQL запиту IN (..., ...).
-     * @param objectTypes Масив типів об'єктів.
-     * @return Рядок у форматі "'TYPE1', 'TYPE2', ...".
-     */
     private String buildObjectTypesSqlString(ObjectType[] objectTypes) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < objectTypes.length; i++) {
-            // Використовуємо назву перерахування як рядок типу об'єкта
-            sb.append("'").append(objectTypes[i].name().replace("_", " ")).append("'"); // Замінюємо '_' на пробіл, як в ALL_OBJECTS
+            // Використовуємо назву enum константи, замінюючи підкреслення на пробіл, якщо потрібно для ALL_OBJECTS
+            // Наприклад, MATERIALIZED_VIEW -> "MATERIALIZED VIEW"
+            String typeForSql = objectTypes[i].name().replace("_", " ");
+            sb.append("'").append(typeForSql).append("'");
             if (i < objectTypes.length - 1) {
                 sb.append(", ");
             }
@@ -146,81 +125,93 @@ public class OracleSchemaExtractor {
         return sb.toString();
     }
 
-
-    /**
-     * Викликає DBMS_METADATA.GET_DDL для отримання DDL конкретного об'єкта.
-     * @param connection Активне JDBC підключення.
-     * @param objectType Тип об'єкта (як рядок з ALL_OBJECTS, наприклад, 'TABLE', 'JOB').
-     * @param objectName Ім'я об'єкта.
-     * @param schemaName Власник об'єкта.
-     * @return Рядок з DDL об'єкта.
-     * @throws SQLException Якщо виникає помилка при виклику DBMS_METADATA.
-     */
-    private String getObjectDdl(Connection connection, String objectType, String objectName, String schemaName) throws SQLException {
+    private String getObjectDdl(Connection connection, String objectTypeForDbmsMetadata, String objectName, String schemaName) throws SQLException {
         String ddl = null;
-        // Визначаємо тип об'єкта для виклику DBMS_METADATA.GET_DDL
-        // Для деяких типів (наприклад, JOB) потрібно використовувати іншу назву
-        String dbmsMetadataObjectType = objectType;
-        // Мапа для відображення типів ALL_OBJECTS на типи DBMS_METADATA
+        // Мапа для відображення типів ALL_OBJECTS на типи, які очікує DBMS_METADATA.GET_DDL
+        // Деякі типи можуть вимагати специфічного перетворення або обробки.
         Map<String, String> dbmsMetadataTypeMap = new HashMap<>();
-        dbmsMetadataTypeMap.put("JOB", "PROCOBJ"); // Oracle Scheduler Job
-        dbmsMetadataTypeMap.put("PROGRAM", "PROCOBJ"); // Oracle Scheduler Program
-        dbmsMetadataTypeMap.put("SCHEDULE", "PROCOBJ"); // Oracle Scheduler Schedule
-        dbmsMetadataTypeMap.put("CHAIN", "PROCOBJ"); // Oracle Scheduler Chain
-        dbmsMetadataTypeMap.put("RULE SET", "RULE_SET"); // Rule Set
-        // TODO: Додати інші відображення, якщо потрібно
+        dbmsMetadataTypeMap.put("JOB", "PROCOBJ"); // Для Oracle Scheduler Jobs
+        // Додайте інші відображення, якщо потрібно, наприклад:
+        // dbmsMetadataTypeMap.put("PACKAGE BODY", "PACKAGE_BODY");
+        // dbmsMetadataTypeMap.put("TYPE BODY", "TYPE_BODY");
 
+        String effectiveObjectType = dbmsMetadataTypeMap.getOrDefault(objectTypeForDbmsMetadata, objectTypeForDbmsMetadata);
 
-        if (dbmsMetadataTypeMap.containsKey(objectType)) {
-            dbmsMetadataObjectType = dbmsMetadataTypeMap.get(objectType);
-        }
-        // Для більшості типів назва в ALL_OBJECTS співпадає з назвою для DBMS_METADATA.GET_DDL
+        // Спеціальна обробка для CONSTRAINT, якщо ми вирішимо їх витягувати окремо
+        // Зазвичай вони є частиною DDL таблиці.
+        // if ("CONSTRAINT".equals(objectTypeForDbmsMetadata)) {
+        //     // Для CONSTRAINT потрібно знати тип обмеження та ім'я таблиці.
+        //     // DBMS_METADATA.GET_DDL('CONSTRAINT', constraint_name, schema_name)
+        //     // DBMS_METADATA.GET_DDL('REF_CONSTRAINT', constraint_name, schema_name) для FK
+        //     // Це може бути складно, тому часто їх отримують разом з таблицею.
+        //     // Якщо ви вирішили їх витягувати, тут потрібна буде додаткова логіка.
+        //     System.out.println("Окреме витягнення DDL для CONSTRAINT " + objectName + " поки не реалізовано повністю.");
+        //     // effectiveObjectType = "CONSTRAINT"; // або "REF_CONSTRAINT"
+        // }
 
 
         try (CallableStatement cs = connection.prepareCall(GET_DDL_SQL)) {
-            // Реєструємо вихідний параметр (повертається CLOB)
             cs.registerOutParameter(1, java.sql.Types.CLOB);
-            // Встановлюємо вхідні параметри для DBMS_METADATA.GET_DDL
-            cs.setString(2, dbmsMetadataObjectType); // Використовуємо відображений тип об'єкта
-            cs.setString(3, objectName); // name
-            cs.setString(4, schemaName); // schema
-            // TODO: Встановити параметри version, model, transform, якщо потрібно
-            // Наприклад, для отримання повного DDL без сегментних атрибутів:
-            // try (Statement transformStmt = connection.createStatement()) {
-            //     transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'SEGMENT_ATTRIBUTES',false); END;");
-            // }
-            // Наприклад, для отримання DDL без власницьких схем:
+            cs.setString(2, effectiveObjectType); // Тип об'єкта для DBMS_METADATA
+            cs.setString(3, objectName);         // Ім'я об'єкта
+            cs.setString(4, schemaName);         // Власник схеми
+
+            // Налаштування параметрів трансформації для DBMS_METADATA (опціонально)
+            // Наприклад, щоб виключити атрибути зберігання:
             // try (Statement transformStmt = connection.createStatement()) {
             //     transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'STORAGE',false); END;");
             //     transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'TABLESPACE',false); END;");
             //     transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'SEGMENT_ATTRIBUTES',false); END;");
-            //     transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'CONSTRAINTS_AS_ALTER',false); END;"); // Constraints as part of table DDL
-            //     transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'SIZE_BYTE_KEYWORD',false); END;"); // Remove BYTE keyword for VARCHAR2/CHAR
+            //     // Для констрейнтів як ALTER TABLE statements:
+            //     // transformStmt.execute("BEGIN DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'CONSTRAINTS_AS_ALTER',true); END;");
+            // } catch (SQLException e) {
+            //     System.err.println("Попередження: не вдалося налаштувати параметри трансформації DBMS_METADATA: " + e.getMessage());
             // }
 
+            cs.execute();
 
-            cs.execute(); // Виконуємо виклик
-
-            // Отримуємо результат (CLOB) та конвертуємо його в String
             java.sql.Clob clob = cs.getClob(1);
             if (clob != null) {
-                // Використовуємо getSubString для отримання вмісту CLOB
-                // Перевіряємо довжину, щоб уникнути помилок для порожніх CLOB
                 if (clob.length() > 0) {
                     ddl = clob.getSubString(1, (int) clob.length());
                 } else {
-                    ddl = ""; // Порожній DDL для порожнього CLOB
+                    ddl = ""; // Порожній DDL
                 }
+                clob.free(); // Звільнення ресурсів CLOB
             }
-
         } catch (SQLException e) {
-            System.err.println("Помилка отримання DDL для " + objectType + " " + schemaName + "." + objectName + ": " + e.getMessage());
-            // TODO: Логування детальної помилки. Можливо, варто продовжити витягнення інших об'єктів.
-            // Кидаємо виняток далі, щоб сигналізувати про проблему.
-            throw e;
+            System.err.println("Помилка отримання DDL для " + effectiveObjectType + " " + schemaName + "." + objectName + ": " + e.getMessage());
+            // Не кидаємо виняток далі, щоб продовжити витягнення інших об'єктів,
+            // але повертаємо null, щоб сигналізувати про проблему з цим конкретним об'єктом.
+            return null;
         }
         return ddl;
     }
 
-    // TODO: Додати інші допоміжні методи, якщо потрібно.
+    /**
+     * Допоміжний метод для конвертації рядка типу об'єкта в enum ObjectType.
+     * @param objectTypeString Рядок типу об'єкта (наприклад, "TABLE", "VIEW", "MATERIALIZED VIEW").
+     * @return Відповідний ObjectType або ObjectType.OTHER, якщо тип не знайдено.
+     */
+    private ObjectType getObjectTypeFromString(String objectTypeString) {
+        if (objectTypeString == null || objectTypeString.trim().isEmpty()) {
+            return ObjectType.OTHER;
+        }
+        String normalizedType = objectTypeString.toUpperCase().replace(" ", "_");
+        try {
+            return ObjectType.valueOf(normalizedType);
+        } catch (IllegalArgumentException e) {
+            // Спеціальні випадки, які не мапляться напряму
+            // (хоча ObjectType.java вже має багато з них, це для прикладу)
+            if ("MATERIALIZED_VIEW".equals(normalizedType)) { // Вже є в enum
+                return ObjectType.MATERIALIZED_VIEW;
+            }
+            if ("DATABASE_LINK".equals(normalizedType)) { // Вже є в enum
+                return ObjectType.DATABASE_LINK;
+            }
+            // Додайте інші мапінги, якщо enum не покриває всі варіанти з ALL_OBJECTS
+            System.err.println("Попередження: Невідомий тип об'єкта '" + objectTypeString + "' (нормалізовано як '" + normalizedType + "'). Повертається OTHER.");
+            return ObjectType.OTHER;
+        }
+    }
 }

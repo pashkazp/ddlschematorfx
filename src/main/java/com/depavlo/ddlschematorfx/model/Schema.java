@@ -1,25 +1,28 @@
 package com.depavlo.ddlschematorfx.model;
 
+import org.apache.commons.collections4.map.MultiKeyMap; // Імпорт MultiKeyMap
+
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.Map; // Залишаємо для сумісності, якщо десь використовується як тип
 import java.util.Objects;
 
 // Клас для представлення структури схеми
 public class Schema {
-    private String id; // Унікальний ідентифікатор схеми (наприклад, згенерований UUID або комбінація назви та часу)
+    private String id; // Унікальний ідентифікатор схеми
     private String name; // Назва схеми (власник)
-    // Мапа, де ключ - унікальний ідентифікатор об'єкта (наприклад, ТИП/ВЛАСНИК/ІМ'Я), а значення - його DDL
-    private Map<String, String> objectDdls;
+    // MultiKeyMap, де ключі - це ObjectType та String (objectName), а значення - DDL
+    private MultiKeyMap<Object, String> objectDdls;
     private LocalDateTime extractionTimestamp; // Час витягнення схеми
-    private ConnectionDetails sourceConnection; // Додано поле для збереження деталей підключення-джерела
+    private ConnectionDetails sourceConnection; // Деталі підключення-джерела
 
     // Конструктор
-    public Schema(String id, String name, Map<String, String> objectDdls, LocalDateTime extractionTimestamp, ConnectionDetails sourceConnection) {
+    public Schema(String id, String name, MultiKeyMap<Object, String> objectDdls, LocalDateTime extractionTimestamp, ConnectionDetails sourceConnection) {
         this.id = id;
         this.name = name;
-        this.objectDdls = objectDdls;
+        // Ініціалізуємо objectDdls, навіть якщо передано null, щоб уникнути NPE
+        this.objectDdls = (objectDdls != null) ? objectDdls : new MultiKeyMap<>();
         this.extractionTimestamp = extractionTimestamp;
-        this.sourceConnection = sourceConnection; // Ініціалізуємо нове поле
+        this.sourceConnection = sourceConnection;
     }
 
     // Гетери
@@ -31,7 +34,12 @@ public class Schema {
         return name;
     }
 
-    public Map<String, String> getObjectDdls() {
+    /**
+     * Повертає MultiKeyMap, що містить DDL об'єктів.
+     * Ключ складається з ObjectType та імені об'єкта (String).
+     * @return MultiKeyMap з DDL об'єктів.
+     */
+    public MultiKeyMap<Object, String> getObjectDdls() {
         return objectDdls;
     }
 
@@ -39,16 +47,17 @@ public class Schema {
         return extractionTimestamp;
     }
 
-    public ConnectionDetails getSourceConnection() { // Додано гетер для sourceConnection
+    public ConnectionDetails getSourceConnection() {
         return sourceConnection;
     }
 
-    // Сетери (якщо потрібні, але для незмінних об'єктів краще їх уникати)
-    // public void setId(String id) { this.id = id; }
-    // public void setName(String name) { this.name = name; }
-    // public void setObjectDdls(Map<String, String> objectDdls) { this.objectDdls = objectDdls; }
-    // public void setExtractionTimestamp(LocalDateTime extractionTimestamp) { this.extractionTimestamp = extractionTimestamp; }
-    // public void setSourceConnection(ConnectionDetails sourceConnection) { this.sourceConnection = sourceConnection; }
+    // Метод для додавання DDL об'єкта
+    public void addObjectDdl(ObjectType objectType, String objectName, String ddl) {
+        if (this.objectDdls == null) {
+            this.objectDdls = new MultiKeyMap<>();
+        }
+        this.objectDdls.put(objectType, objectName, ddl);
+    }
 
 
     @Override
@@ -58,11 +67,10 @@ public class Schema {
                 ", name='" + name + '\'' +
                 ", objectCount=" + (objectDdls != null ? objectDdls.size() : 0) +
                 ", extractionTimestamp=" + extractionTimestamp +
-                ", sourceConnectionName='" + (sourceConnection != null ? sourceConnection.getName() : "N/A") + '\'' + // Додано назву підключення в toString
+                ", sourceConnectionName='" + (sourceConnection != null ? sourceConnection.getName() : "N/A") + '\'' +
                 '}';
     }
 
-    // Методи equals та hashCode для порівняння об'єктів Schema за їх ID
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
