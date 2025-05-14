@@ -21,9 +21,9 @@
         <logback.version>1.4.14</logback.version>
         <oracle.jdbc.version>23.3.0.23.09</oracle.jdbc.version>
         <schemacrawler-oracle.version>16.25.3</schemacrawler-oracle.version>
-        <jsqlformatter.version>5.0</jsqlformatter.version>
-        <jsqlparser.version>5.2</jsqlparser.version>
         <commons.collections4.version>4.4</commons.collections4.version>
+
+
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
         <maven-shade-plugin.version>3.5.1</maven-shade-plugin.version>
         <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
@@ -181,23 +181,6 @@
         </dependency>
 
         <dependency>
-            <groupId>com.github.jsqlparser</groupId>
-            <artifactId>jsqlparser</artifactId>
-            <version>${jsqlparser.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.manticore-projects.jsqlformatter</groupId>
-            <artifactId>jsqlformatter</artifactId>
-            <version>${jsqlformatter.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.github.jsqlparser</groupId>
-                    <artifactId>jsqlparser</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-collections4</artifactId>
             <version>${commons.collections4.version}</version>
@@ -231,7 +214,7 @@
                             <workingDirectory>${project.build.directory}/classes</workingDirectory>
                             <arguments>
                                 <argument>--module-path</argument>
-                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-${os.detected.classifier}.jar</argument>
+                                <argument>${settings.localRepository}/org/openjfx/javafx-base/${javafx.version}/javafx-base-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org.openjfx/javafx-controls/${javafx.version}/javafx-controls-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org.openjfx/javafx-fxml/${javafx.version}/javafx-fxml-${javafx.version}-${os.detected.classifier}.jar;${settings.localRepository}/org/openjfx/javafx-graphics/${javafx.version}/javafx-graphics-${javafx.version}-${os.detected.classifier}.jar</argument>
                                 <argument>--add-modules</argument>
                                 <argument>javafx.controls,javafx.fxml,javafx.base,javafx.graphics</argument>
                             </arguments>
