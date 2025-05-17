@@ -4,7 +4,7 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<BorderPane prefHeight="163.0" prefWidth="333.0" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.depavlo.ddlschematorfx.controller.MainWindowController">
+<BorderPane prefHeight="155.0" prefWidth="333.0" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.depavlo.ddlschematorfx.controller.MainWindowController">
     <top>
         <MenuBar BorderPane.alignment="CENTER">
             <menus>
@@ -13,8 +13,6 @@
                         <MenuItem mnemonicParsing="false" onAction="#handleDbSettings" text="Налаштування підключень..." />
                         <MenuItem mnemonicParsing="false" text="Налаштування GitLab..." />
                         <SeparatorMenuItem mnemonicParsing="false" />
-                        <MenuItem fx:id="saveSchemaMenuItem" mnemonicParsing="false" onAction="#handleSaveSchemaAction" text="Зберегти схему як..." />
-                        <SeparatorMenuItem mnemonicParsing="false" />
                         <MenuItem mnemonicParsing="false" onAction="#handleExit" text="Вихід" />
                     </items>
                 </Menu>
@@ -22,6 +20,7 @@
                     <items>
                         <MenuItem fx:id="extractSchemaMenuItem" mnemonicParsing="false" onAction="#handleExtractSchema" text="Витягти схему з БД..." />
                         <MenuItem mnemonicParsing="false" onAction="#handleLoadSchemaFromDirectory" text="Завантажити схему з DDL-директорії..." />
+                        <MenuItem fx:id="saveSchemaMenuItem" mnemonicParsing="false" onAction="#handleSaveSchemaAction" text="Зберегти схему як..." />
                         <SeparatorMenuItem mnemonicParsing="false" />
                         <MenuItem fx:id="compareSchemasMenuItem" mnemonicParsing="false" onAction="#handleCompareSchemas" text="Порівняти схеми..." />
                     </items>
