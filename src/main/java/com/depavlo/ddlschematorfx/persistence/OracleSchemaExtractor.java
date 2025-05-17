@@ -69,9 +69,11 @@ public class OracleSchemaExtractor {
                         String ddl = getObjectDdl(connection, objectTypeString, objectName, schemaOwnerName);
                         if (ddl != null) {
                             objectDdlsMap.put(currentObjectType, objectName, ddl);
-                            // System.out.println("Витягнуто DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + ")");
+                            // Розкоментовано для індикації прогресу
+                            System.out.println("Витягнуто DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + ")");
                         } else {
-                            // System.out.println("Порожній DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + "). Пропущено.");
+                            // Розкоментовано для індикації прогресу
+                            System.out.println("Порожній DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + "). Пропущено.");
                         }
                     }
                 }
