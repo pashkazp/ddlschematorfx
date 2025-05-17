@@ -1,9 +1,7 @@
 package com.depavlo.ddlschematorfx.service;
 
-import com.depavlo.ddlschematorfx.model.ConnectionDetails;
 import com.depavlo.ddlschematorfx.model.ObjectType;
 import com.depavlo.ddlschematorfx.model.Schema;
-import org.apache.commons.collections4.keyvalue.MultiKey;
 import org.apache.commons.collections4.map.MultiKeyMap;
 
 import java.io.BufferedWriter;
@@ -16,24 +14,55 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.HashMap; // ВИПРАВЛЕНО: Використовуємо HashMap тут
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.apache.commons.collections4.keyvalue.MultiKey;
+
 
 public class SchemaService {
 
-    // ВИПРАВЛЕНО: loadedSchemas має бути звичайним HashMap<String, Schema>
-    private final Map<String, Schema> loadedSchemas = new HashMap<>();
+    private final Map<String, Schema> loadedSchemas = new HashMap<>(); // Ключ - це Schema.id (UUID)
     private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
-    public void addSchema(Schema schema) {
-        if (schema != null && schema.getId() != null) {
-            loadedSchemas.put(schema.getId(), schema);
-            System.out.println("Схему '" + schema.getName() + "' з ID '" + schema.getId() + "' додано до сховища.");
+    /**
+     * Додає або оновлює схему у сховищі.
+     * Якщо схема з таким самим sourceIdentifier вже існує, вона замінюється.
+     * @param newSchema Нова схема для додавання або оновлення.
+     */
+    public void addSchema(Schema newSchema) {
+        if (newSchema == null || newSchema.getId() == null) {
+            System.err.println("Помилка: Спроба додати null схему або схему без ID.");
+            return;
         }
+
+        String sourceId = newSchema.getSourceIdentifier();
+
+        if (sourceId != null && !sourceId.trim().isEmpty()) {
+            // Шукаємо існуючу схему з таким самим sourceIdentifier
+            Optional<Schema> existingSchemaOpt = loadedSchemas.values().stream()
+                    .filter(s -> sourceId.equals(s.getSourceIdentifier()))
+                    .findFirst();
+
+            if (existingSchemaOpt.isPresent()) {
+                Schema oldSchema = existingSchemaOpt.get();
+                loadedSchemas.remove(oldSchema.getId()); // Видаляємо стару схему за її унікальним ID екземпляра
+                System.out.println("Оновлено схему для джерела: " + sourceId + ". Старий ID: " + oldSchema.getId() + ", Новий ID: " + newSchema.getId());
+            }
+        } else {
+            // Якщо sourceIdentifier не встановлено, ми не можемо надійно визначити, чи це та сама схема.
+            // Можливо, варто генерувати попередження або мати іншу логіку.
+            // Наразі, якщо sourceIdentifier null, просто додаємо як нову унікальну.
+            System.out.println("Увага: Схема '" + newSchema.getName() + "' (ID: " + newSchema.getId() + ") додається без sourceIdentifier. Неможливо відстежити дублікати за джерелом.");
+        }
+
+        loadedSchemas.put(newSchema.getId(), newSchema); // Додаємо нову (або оновлену) схему
+        System.out.println("Схему '" + newSchema.getName() + "' (ID: " + newSchema.getId() + ", SourceID: " + (sourceId != null ? sourceId : "N/A") + ") додано/оновлено у сховищі.");
     }
+
 
     public Schema getSchema(String schemaId) {
         return loadedSchemas.get(schemaId);
@@ -60,8 +89,15 @@ public class SchemaService {
         if (schema.getSourceConnection() != null && schema.getSourceConnection().getName() != null && !schema.getSourceConnection().getName().trim().isEmpty()) {
             connectionName = schema.getSourceConnection().getName();
         } else {
-            connectionName = "FILE_LOADED";
-            System.out.println("Увага: ConnectionDetails для схеми '" + schema.getName() + "' не знайдено. Використовується префікс '" + connectionName + "' для назви директорії.");
+            // Якщо схема завантажена з файлу, sourceConnection може бути null.
+            // Використовуємо частину sourceIdentifier, якщо він є, або назву схеми.
+            if (schema.getSourceIdentifier() != null && schema.getSourceIdentifier().startsWith("DIR::")) {
+                Path dirPath = Paths.get(schema.getSourceIdentifier().substring(5));
+                connectionName = dirPath.getFileName().toString(); // Використовуємо назву директорії як "connection name"
+            } else {
+                connectionName = "FILE_LOADED";
+            }
+            System.out.println("Увага: ConnectionDetails для схеми '" + schema.getName() + "' не знайдено. Використовується '" + connectionName + "' для назви директорії.");
         }
 
         String cleanConnectionName = connectionName.replaceAll("[^a-zA-Z0-9_.-]", "_");
@@ -144,7 +180,6 @@ public class SchemaService {
                 }
                 schemaNameFromFile = sb.toString();
                 if(schemaNameFromFile.endsWith("_")) schemaNameFromFile = schemaNameFromFile.substring(0, schemaNameFromFile.length()-1);
-
             } else {
                 schemaNameFromFile = directoryName;
             }
@@ -189,7 +224,9 @@ public class SchemaService {
             });
         }
 
-        String schemaId = UUID.randomUUID().toString();
-        return new Schema(schemaId, schemaNameFromFile, objectDdls, extractionTimestampFromFile, null);
+        String schemaId = UUID.randomUUID().toString(); // Новий унікальний ID для цього екземпляра
+        // Створюємо sourceIdentifier для схем з директорії
+        String sourceIdentifier = "DIR::" + schemaDirectoryPath.toAbsolutePath().toString();
+        return new Schema(schemaId, schemaNameFromFile, objectDdls, extractionTimestampFromFile, null, sourceIdentifier);
     }
 }
