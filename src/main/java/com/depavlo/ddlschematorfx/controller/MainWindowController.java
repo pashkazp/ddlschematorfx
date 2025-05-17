@@ -5,7 +5,7 @@ import com.depavlo.ddlschematorfx.model.Difference;
 import com.depavlo.ddlschematorfx.model.Schema;
 import com.depavlo.ddlschematorfx.persistence.ConnectionConfigManager;
 import com.depavlo.ddlschematorfx.persistence.OracleSchemaExtractor;
-import com.depavlo.ddlschematorfx.service.SchemaComparisonService; // Імпорт сервісу порівняння
+import com.depavlo.ddlschematorfx.service.SchemaComparisonService;
 import com.depavlo.ddlschematorfx.service.SchemaService;
 
 import javafx.application.Platform;
@@ -17,12 +17,12 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
-import javafx.scene.control.ChoiceDialog; // Для вибору схем
+import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
-import javafx.scene.control.MenuItem; // Для доступу до пункту меню
-import javafx.scene.layout.AnchorPane;
+import javafx.scene.control.MenuItem;
+import javafx.scene.layout.AnchorPane; // Додано імпорт
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
@@ -46,18 +46,17 @@ public class MainWindowController {
     @FXML
     private Button extractSchemaButton;
     @FXML
-    private MenuItem compareSchemasMenuItem; // fx:id для пункту меню "Порівняти схеми..."
+    private MenuItem compareSchemasMenuItem;
 
     private Stage primaryStage;
     private ConnectionConfigManager connectionConfigManager;
     private SchemaService schemaService;
-    private SchemaComparisonService schemaComparisonService; // Поле для сервісу порівняння
+    private SchemaComparisonService schemaComparisonService;
 
     @FXML
     private void initialize() {
         connectionComboBox.setCellFactory(lv -> new ConnectionDetailsListCell());
         connectionComboBox.setButtonCell(new ConnectionDetailsListCell());
-        // Початково деактивуємо пункт меню порівняння, активуємо, коли є хоча б 2 схеми
         if (compareSchemasMenuItem != null) {
             compareSchemasMenuItem.setDisable(true);
         }
@@ -77,7 +76,6 @@ public class MainWindowController {
         this.schemaService = schemaService;
     }
 
-    // Сеттер для SchemaComparisonService
     public void setSchemaComparisonService(SchemaComparisonService schemaComparisonService) {
         this.schemaComparisonService = schemaComparisonService;
     }
@@ -95,7 +93,6 @@ public class MainWindowController {
         }
     }
 
-
     @FXML
     private void handleExit() {
         Platform.exit();
@@ -105,7 +102,7 @@ public class MainWindowController {
     private void handleDbSettings() {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/depavlo/ddlschematorfx/view/DbSettings.fxml"));
-            AnchorPane page = loader.load();
+            AnchorPane page = loader.load(); // Змінено Parent на AnchorPane, якщо DbSettings.fxml використовує AnchorPane як корінь
             Stage dialogStage = new Stage();
             dialogStage.setTitle("Налаштування підключень до БД");
             dialogStage.initModality(Modality.WINDOW_MODAL);
@@ -181,9 +178,6 @@ public class MainWindowController {
         }
     }
 
-    /**
-     * Обробник для пункту меню "Порівняти схеми...".
-     */
     @FXML
     private void handleCompareSchemas() {
         List<Schema> availableSchemas = schemaService.getAllSchemas();
@@ -192,12 +186,10 @@ public class MainWindowController {
             return;
         }
 
-        // Створюємо список назв схем для діалогових вікон
         List<String> schemaNames = availableSchemas.stream()
-                .map(s -> s.getName() + " (ID: " + s.getId().substring(0, 8) + "...)") // Короткий ID для унікальності
+                .map(s -> s.getName() + " (ID: " + s.getId().substring(0, 8) + "...)")
                 .collect(Collectors.toList());
 
-        // Діалог вибору першої схеми (джерела)
         ChoiceDialog<String> sourceDialog = new ChoiceDialog<>(null, schemaNames);
         sourceDialog.setTitle("Вибір схеми-джерела");
         sourceDialog.setHeaderText("Виберіть першу схему (джерело) для порівняння:");
@@ -208,9 +200,8 @@ public class MainWindowController {
             statusBarLabel.setText("Порівняння скасовано.");
             return;
         }
-        Schema sourceSchema = findSchemaByDisplayName(sourceResult.get(), availableSchemas);
+        final Schema sourceSchema = findSchemaByDisplayName(sourceResult.get(), availableSchemas); // Зроблено final
 
-        // Діалог вибору другої схеми (цілі)
         ChoiceDialog<String> targetDialog = new ChoiceDialog<>(null, schemaNames);
         targetDialog.setTitle("Вибір цільової схеми");
         targetDialog.setHeaderText("Виберіть другу схему (цільову) для порівняння:");
@@ -221,23 +212,20 @@ public class MainWindowController {
             statusBarLabel.setText("Порівняння скасовано.");
             return;
         }
-        Schema targetSchema = findSchemaByDisplayName(targetResult.get(), availableSchemas);
+        final Schema targetSchema = findSchemaByDisplayName(targetResult.get(), availableSchemas); // Зроблено final
 
         if (sourceSchema == null || targetSchema == null) {
-            showAlert(AlertType.ERROR, "Порівняння схем", "Помилка вибору схем", "Не вдалося знайти вибрані схеми. Спробуйте ще раз.");
+            showAlert(AlertType.ERROR, "Порівняння схем", "Помилка вибору схем", "Не вдалося знайти вибрані схеми.");
             return;
         }
 
         if (sourceSchema.getId().equals(targetSchema.getId())) {
-            showAlert(AlertType.WARNING, "Порівняння схем", "Однакові схеми", "Вибрано одну й ту ж схему для джерела та цілі. Порівняння не має сенсу.");
+            showAlert(AlertType.WARNING, "Порівняння схем", "Однакові схеми", "Вибрано одну й ту ж схему для джерела та цілі.");
             return;
         }
 
-
         statusBarLabel.setText("Порівняння схем: " + sourceSchema.getName() + " та " + targetSchema.getName() + "...");
-        // Блокуємо пункт меню на час порівняння
         if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(true);
-
 
         Task<List<Difference>> comparisonTask = new Task<>() {
             @Override
@@ -249,39 +237,63 @@ public class MainWindowController {
         comparisonTask.setOnSucceeded(event -> {
             List<Difference> differences = comparisonTask.getValue();
             statusBarLabel.setText("Порівняння завершено. Знайдено відмінностей: " + differences.size());
-            if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(false); // Розблоковуємо
-            updateCompareMenuItemState(); // Оновлюємо стан, якщо кількість схем змінилась
+            if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(false);
+            updateCompareMenuItemState();
 
-            // На цьому етапі просто виводимо результат
-            System.out.println("Результати порівняння схем '" + sourceSchema.getName() + "' (Source) та '" + targetSchema.getName() + "' (Target):");
             if (differences.isEmpty()) {
-                System.out.println("Відмінностей не знайдено.");
                 showAlert(AlertType.INFORMATION, "Результат порівняння", "Відмінностей не знайдено",
-                        "Схеми '" + sourceSchema.getName() + "' та '" + targetSchema.getName() + "' ідентичні (з урахуванням форматування).");
+                        "Схеми '" + sourceSchema.getName() + "' та '" + targetSchema.getName() + "' ідентичні.");
             } else {
-                differences.forEach(System.out::println);
-                // TODO: Показати результати у спеціальному вікні/таблиці
-                showAlert(AlertType.INFORMATION, "Результат порівняння", "Знайдено відмінностей: " + differences.size(),
-                        "Деталі виведено в консоль. Перегляньте консоль для списку відмінностей між '" +
-                                sourceSchema.getName() + "' та '" + targetSchema.getName() + "'.");
+                // Відкриваємо нове вікно для відображення результатів
+                showComparisonResultsWindow(differences, sourceSchema.getName(), targetSchema.getName());
             }
         });
 
         comparisonTask.setOnFailed(event -> {
             handleTaskFailure(comparisonTask, "порівняння схем");
-            if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(false); // Розблоковуємо
+            if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(false);
             updateCompareMenuItemState();
         });
         comparisonTask.setOnCancelled(event -> {
             handleTaskCancellation("порівняння схем");
-            if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(false); // Розблоковуємо
+            if (compareSchemasMenuItem != null) compareSchemasMenuItem.setDisable(false);
             updateCompareMenuItemState();
         });
 
         new Thread(comparisonTask).start();
     }
 
-    // Допоміжний метод для пошуку схеми за відображуваним ім'ям
+    /**
+     * Відкриває нове вікно для відображення результатів порівняння.
+     * @param differences Список відмінностей.
+     * @param sourceSchemaName Назва схеми-джерела.
+     * @param targetSchemaName Назва цільової схеми.
+     */
+    private void showComparisonResultsWindow(List<Difference> differences, String sourceSchemaName, String targetSchemaName) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/depavlo/ddlschematorfx/view/ComparisonResultsView.fxml"));
+            AnchorPane page = loader.load(); // Припускаємо, що корінь ComparisonResultsView.fxml - AnchorPane
+
+            Stage resultsStage = new Stage();
+            resultsStage.setTitle("Результати порівняння схем");
+            resultsStage.initModality(Modality.WINDOW_MODAL); // Модальне, якщо потрібно блокувати головне
+            resultsStage.initOwner(primaryStage); // Власник - головне вікно
+            Scene scene = new Scene(page);
+            resultsStage.setScene(scene);
+
+            ComparisonResultsController controller = loader.getController();
+            controller.setDialogStage(resultsStage);
+            controller.setDifferences(differences, sourceSchemaName, targetSchemaName);
+
+            resultsStage.showAndWait(); // Або show(), якщо не потрібно блокувати
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            showAlert(AlertType.ERROR, "Помилка відображення", "Не вдалося відкрити вікно результатів",
+                    "Сталася помилка: " + e.getMessage());
+        }
+    }
+
     private Schema findSchemaByDisplayName(String displayName, List<Schema> schemas) {
         for (Schema schema : schemas) {
             String currentDisplayName = schema.getName() + " (ID: " + schema.getId().substring(0, 8) + "...)";
@@ -291,7 +303,6 @@ public class MainWindowController {
         }
         return null;
     }
-
 
     @FXML
     private void handleSaveActiveSchema() {
@@ -342,7 +353,6 @@ public class MainWindowController {
         statusBarLabel.setText("Операцію '" + operationName + "' скасовано.");
         showAlert(AlertType.WARNING, "Операцію скасовано", "Скасовано", "Операцію '" + operationName + "' було скасовано.");
     }
-
 
     private void showAlert(AlertType type, String title, String header, String content) {
         Alert alert = new Alert(type);
