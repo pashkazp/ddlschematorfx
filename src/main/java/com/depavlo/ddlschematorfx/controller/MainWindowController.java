@@ -22,9 +22,11 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.TextInputDialog; // Для введення назви директорії
+// TextInputDialog більше не потрібен для цього методу
+// import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.AnchorPane;
-import javafx.stage.DirectoryChooser;
+import javafx.scene.layout.VBox; // Потрібен для завантаження SaveSchemaDialog.fxml, якщо його корінь VBox
+import javafx.stage.DirectoryChooser; // DirectoryChooser все ще використовується в SaveSchemaDialogController
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
@@ -32,12 +34,13 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
-import java.nio.file.Paths; // Для роботи зі шляхами
+import java.nio.file.Paths;
 import java.sql.SQLException;
-import java.time.format.DateTimeFormatter; // Для форматування часу в назві директорії
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.prefs.Preferences; // Для збереження останньої директорії
 import java.util.stream.Collectors;
 
 public class MainWindowController {
@@ -51,15 +54,16 @@ public class MainWindowController {
     @FXML
     private MenuItem compareSchemasMenuItem;
     @FXML
-    private MenuItem saveSchemaMenuItem; // Додайте fx:id="saveSchemaMenuItem" до пункту меню "Зберегти схему як..."
+    private MenuItem saveSchemaMenuItem;
 
     private Stage primaryStage;
     private ConnectionConfigManager connectionConfigManager;
     private SchemaService schemaService;
     private SchemaComparisonService schemaComparisonService;
 
-    // Форматер для запропонованої назви директорії
     private static final DateTimeFormatter DIRECTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    // Для збереження шляху останньої використаної базової директорії
+    private static final String PREF_LAST_SAVE_BASE_DIR = "lastSaveBaseDir";
 
 
     @FXML
@@ -70,7 +74,7 @@ public class MainWindowController {
             compareSchemasMenuItem.setDisable(true);
         }
         if (saveSchemaMenuItem != null) {
-            saveSchemaMenuItem.setDisable(true); // Деактивуємо, поки немає схем
+            saveSchemaMenuItem.setDisable(true);
         }
         updateSchemaActionMenuItemsState();
     }
@@ -99,9 +103,6 @@ public class MainWindowController {
         }
     }
 
-    /**
-     * Оновлює стан пунктів меню, пов'язаних зі схемами (Порівняти, Зберегти).
-     */
     private void updateSchemaActionMenuItemsState() {
         boolean schemasAvailable = schemaService != null && !schemaService.getAllSchemas().isEmpty();
         boolean enoughSchemasForComparison = schemaService != null && schemaService.getAllSchemas().size() >= 2;
@@ -160,7 +161,7 @@ public class MainWindowController {
         };
         extractionTask.setOnSucceeded(event -> {
             final Schema extractedSchema = extractionTask.getValue();
-            schemaService.addSchema(extractedSchema); // addSchema тепер обробляє заміну
+            schemaService.addSchema(extractedSchema);
             statusBarLabel.setText("Схему '" + extractedSchema.getName() + "' успішно витягнуто/оновлено.");
             extractSchemaButton.setDisable(false);
             showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему '" + extractedSchema.getName() + "' витягнуто/оновлено!");
@@ -187,7 +188,7 @@ public class MainWindowController {
             };
             loadTask.setOnSucceeded(event -> {
                 final Schema loadedSchema = loadTask.getValue();
-                schemaService.addSchema(loadedSchema); // addSchema тепер обробляє заміну
+                schemaService.addSchema(loadedSchema);
                 statusBarLabel.setText("Схему '" + loadedSchema.getName() + "' успішно завантажено/оновлено.");
                 showAlert(AlertType.INFORMATION, "Завантаження схеми", "Успіх", "Схему '" + loadedSchema.getName() + "' завантажено/оновлено з: " + schemaDirectoryPath.toString());
                 updateSchemaActionMenuItemsState();
@@ -287,7 +288,7 @@ public class MainWindowController {
         String sourceInfo = "N/A";
         if (schema.getCurrentSourceIdentifier() != null) {
             if (schema.getCurrentSourceIdentifier().startsWith("DB::")) {
-                sourceInfo = "DB: " + schema.getName(); // Ім'я схеми тут вже є
+                sourceInfo = "DB: " + schema.getName();
                 if (schema.getSourceConnection() != null) {
                     sourceInfo = "DB: " + schema.getSourceConnection().getName() + "/" + schema.getName();
                 }
@@ -308,19 +309,14 @@ public class MainWindowController {
         return null;
     }
 
-    /**
-     * Обробник для пункту меню "Зберегти схему як...".
-     * Дозволяє вибрати схему, вказати назву директорії та зберегти.
-     */
     @FXML
-    private void handleSaveSchemaAction() { // Перейменовано з handleSaveActiveSchema
+    private void handleSaveSchemaAction() {
         List<Schema> availableSchemas = schemaService.getAllSchemas();
         if (availableSchemas.isEmpty()) {
             showAlert(AlertType.WARNING, "Збереження схеми", "Немає доступних схем", "Спочатку витягніть або завантажте схему.");
             return;
         }
 
-        // 1. Вибір схеми для збереження
         List<String> schemaDisplayNames = availableSchemas.stream()
                 .map(this::getSchemaDisplayName)
                 .collect(Collectors.toList());
@@ -342,76 +338,98 @@ public class MainWindowController {
             return;
         }
 
-        // 2. Пропозиція та редагування назви директорії
+        // Формуємо запропоновану назву директорії
         String proposedDirName = schemaToSave.getName().replaceAll("[^a-zA-Z0-9_.-]", "_") +
                 "_" +
                 schemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
-
-        // Якщо є sourceConnection, додамо його ім'я на початок для більшої інформативності
         if (schemaToSave.getSourceConnection() != null && schemaToSave.getSourceConnection().getName() != null) {
             proposedDirName = schemaToSave.getSourceConnection().getName().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + proposedDirName;
         } else if (schemaToSave.getCurrentSourceIdentifier() != null && schemaToSave.getCurrentSourceIdentifier().startsWith("DIR::")) {
-            // Якщо завантажено з директорії, можна використати частину шляху
             Path dirPath = Paths.get(schemaToSave.getCurrentSourceIdentifier().substring(5));
-            proposedDirName = dirPath.getFileName().toString().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + proposedDirName;
+            // Використовуємо назву директорії, з якої було завантажено, як частину запропонованої назви
+            // Це може бути корисно, якщо користувач хоче "перезберегти" завантажену з файлів схему під новою міткою часу
+            proposedDirName = dirPath.getFileName().toString().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_SAVED_" +
+                    schemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
         }
 
 
-        TextInputDialog dirNameDialog = new TextInputDialog(proposedDirName);
-        dirNameDialog.setTitle("Назва директорії для збереження");
-        dirNameDialog.setHeaderText("Введіть або відредагуйте назву для директорії, в яку буде збережено схему.\nЦя директорія буде створена всередині обраної вами базової директорії.");
-        dirNameDialog.setContentText("Назва директорії схеми:");
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/depavlo/ddlschematorfx/view/SaveSchemaDialog.fxml"));
+            // Важливо: тип кореневого елемента SaveSchemaDialog.fxml (VBox)
+            VBox page = loader.load();
 
-        Optional<String> dirNameResult = dirNameDialog.showAndWait();
-        if (dirNameResult.isEmpty() || dirNameResult.get().trim().isEmpty()) {
-            statusBarLabel.setText("Збереження скасовано: не вказано назву директорії.");
-            return;
-        }
-        final String finalSchemaDirectoryName = dirNameResult.get().trim();
+            Stage dialogStage = new Stage();
+            dialogStage.setTitle("Параметри збереження схеми");
+            dialogStage.initModality(Modality.WINDOW_MODAL);
+            dialogStage.initOwner(primaryStage);
+            Scene scene = new Scene(page);
+            dialogStage.setScene(scene);
 
-        // 3. Вибір базової директорії
-        DirectoryChooser directoryChooser = new DirectoryChooser();
-        directoryChooser.setTitle("Виберіть базову директорію для збереження схеми");
-        File selectedBaseDirectory = directoryChooser.showDialog(primaryStage);
+            SaveSchemaDialogController controller = loader.getController();
+            controller.setDialogStage(dialogStage);
+            controller.setProposedSchemaDirectoryName(proposedDirName);
 
-        if (selectedBaseDirectory == null) {
-            statusBarLabel.setText("Збереження скасовано: не вибрано базову директорію.");
-            return;
-        }
-
-        final Path baseDirectoryPath = selectedBaseDirectory.toPath();
-        statusBarLabel.setText("Збереження схеми '" + schemaToSave.getName() + "'...");
-        if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
-
-
-        Task<Void> saveTask = new Task<>() {
-            @Override
-            protected Void call() throws Exception {
-                // Використовуємо новий метод saveSchemaToFile з трьома аргументами
-                schemaService.saveSchemaToFile(schemaToSave, baseDirectoryPath, finalSchemaDirectoryName);
-                return null;
+            // Встановлюємо початкову базову директорію (остання використана)
+            Preferences prefs = Preferences.userNodeForPackage(MainWindowController.class);
+            String lastUsedBaseDir = prefs.get(PREF_LAST_SAVE_BASE_DIR, null);
+            if (lastUsedBaseDir != null) {
+                File initialDir = new File(lastUsedBaseDir);
+                if (initialDir.isDirectory()) {
+                    controller.setInitialBaseDirectory(initialDir);
+                }
             }
-        };
 
-        saveTask.setOnSucceeded(event -> {
-            statusBarLabel.setText("Схему '" + schemaToSave.getName() + "' успішно збережено у '" + finalSchemaDirectoryName + "'.");
-            if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
-            updateSchemaActionMenuItemsState();
-            showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему '" + schemaToSave.getName() + "' успішно збережено в директорію:\n" + baseDirectoryPath.resolve(finalSchemaDirectoryName).toString());
-        });
+            dialogStage.showAndWait();
 
-        saveTask.setOnFailed(event -> {
-            handleTaskFailure(saveTask, "збереження схеми");
-            if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
-            updateSchemaActionMenuItemsState();
-        });
-        saveTask.setOnCancelled(event -> {
-            handleTaskCancellation("збереження схеми");
-            if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
-            updateSchemaActionMenuItemsState();
-        });
+            if (controller.isSaveClicked()) {
+                final String finalSchemaDirectoryName = controller.getSchemaDirectoryName();
+                final Path baseDirectoryPath = controller.getSelectedBaseDirectoryPath();
 
-        new Thread(saveTask).start();
+                if (finalSchemaDirectoryName == null || finalSchemaDirectoryName.trim().isEmpty() || baseDirectoryPath == null) {
+                    showAlert(AlertType.ERROR, "Збереження схеми", "Неповні дані", "Назва директорії схеми та базова директорія мають бути вказані.");
+                    return;
+                }
+
+                // Зберігаємо останню використану базову директорію
+                prefs.put(PREF_LAST_SAVE_BASE_DIR, baseDirectoryPath.toString());
+
+
+                statusBarLabel.setText("Збереження схеми '" + schemaToSave.getName() + "'...");
+                if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
+
+                Task<Void> saveTask = new Task<>() {
+                    @Override
+                    protected Void call() throws Exception {
+                        schemaService.saveSchemaToFile(schemaToSave, baseDirectoryPath, finalSchemaDirectoryName);
+                        return null;
+                    }
+                };
+
+                saveTask.setOnSucceeded(event -> {
+                    statusBarLabel.setText("Схему '" + schemaToSave.getName() + "' успішно збережено у '" + finalSchemaDirectoryName + "'.");
+                    if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
+                    updateSchemaActionMenuItemsState();
+                    showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему '" + schemaToSave.getName() + "' успішно збережено в директорію:\n" + baseDirectoryPath.resolve(finalSchemaDirectoryName).toString());
+                });
+                saveTask.setOnFailed(event -> {
+                    handleTaskFailure(saveTask, "збереження схеми");
+                    if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
+                    updateSchemaActionMenuItemsState();
+                });
+                saveTask.setOnCancelled(event -> {
+                    handleTaskCancellation("збереження схеми");
+                    if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
+                    updateSchemaActionMenuItemsState();
+                });
+                new Thread(saveTask).start();
+            } else {
+                statusBarLabel.setText("Збереження скасовано.");
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            showAlert(AlertType.ERROR, "Помилка збереження", "Не вдалося відкрити діалог збереження", "Сталася помилка: " + e.getMessage());
+        }
     }
 
 
