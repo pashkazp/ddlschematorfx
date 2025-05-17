@@ -16,17 +16,16 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.Button;
+// import javafx.scene.control.Button; // Більше не потрібна кнопка extractSchemaButton на головній формі
 import javafx.scene.control.ChoiceDialog;
-import javafx.scene.control.ComboBox;
+import javafx.scene.control.ComboBox; // ComboBox для вибору підключення буде в діалозі
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.MenuItem;
-// TextInputDialog більше не потрібен для цього методу
-// import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.VBox; // Потрібен для завантаження SaveSchemaDialog.fxml, якщо його корінь VBox
-import javafx.stage.DirectoryChooser; // DirectoryChooser все ще використовується в SaveSchemaDialogController
+import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
@@ -40,21 +39,21 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.prefs.Preferences; // Для збереження останньої директорії
+import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 public class MainWindowController {
 
     @FXML
     private Label statusBarLabel;
-    @FXML
-    private ComboBox<ConnectionDetails> connectionComboBox;
-    @FXML
-    private Button extractSchemaButton;
+    // @FXML private ComboBox<ConnectionDetails> connectionComboBox; // Видалено з FXML головного вікна
+    // @FXML private Button extractSchemaButton; // Видалено з FXML головного вікна
     @FXML
     private MenuItem compareSchemasMenuItem;
     @FXML
     private MenuItem saveSchemaMenuItem;
+    @FXML
+    private MenuItem extractSchemaMenuItem; // Додайте fx:id для пункту меню "Витягти схему з БД..."
 
     private Stage primaryStage;
     private ConnectionConfigManager connectionConfigManager;
@@ -62,19 +61,21 @@ public class MainWindowController {
     private SchemaComparisonService schemaComparisonService;
 
     private static final DateTimeFormatter DIRECTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-    // Для збереження шляху останньої використаної базової директорії
     private static final String PREF_LAST_SAVE_BASE_DIR = "lastSaveBaseDir";
 
 
     @FXML
     private void initialize() {
-        connectionComboBox.setCellFactory(lv -> new ConnectionDetailsListCell());
-        connectionComboBox.setButtonCell(new ConnectionDetailsListCell());
+        // Ініціалізація ComboBox та Button видалена, оскільки їх немає на головній формі
         if (compareSchemasMenuItem != null) {
             compareSchemasMenuItem.setDisable(true);
         }
         if (saveSchemaMenuItem != null) {
             saveSchemaMenuItem.setDisable(true);
+        }
+        if (extractSchemaMenuItem != null) {
+            // Пункт "Витягти схему" активний, якщо є хоча б одне налаштоване підключення
+            extractSchemaMenuItem.setDisable(connectionConfigManager == null || connectionConfigManager.loadConnections().isEmpty());
         }
         updateSchemaActionMenuItemsState();
     }
@@ -85,7 +86,11 @@ public class MainWindowController {
 
     public void setConnectionConfigManager(ConnectionConfigManager connectionConfigManager) {
         this.connectionConfigManager = connectionConfigManager;
-        loadConnectionsIntoComboBox();
+        // loadConnectionsIntoComboBox(); // Більше не завантажуємо в ComboBox на головній формі
+        // Оновлюємо стан пункту меню витягнення схеми після встановлення менеджера конфігурацій
+        if (extractSchemaMenuItem != null) {
+            extractSchemaMenuItem.setDisable(this.connectionConfigManager == null || this.connectionConfigManager.loadConnections().isEmpty());
+        }
     }
 
     public void setSchemaService(SchemaService schemaService) {
@@ -96,12 +101,7 @@ public class MainWindowController {
         this.schemaComparisonService = schemaComparisonService;
     }
 
-    private void loadConnectionsIntoComboBox() {
-        if (connectionConfigManager != null) {
-            List<ConnectionDetails> connections = connectionConfigManager.loadConnections();
-            connectionComboBox.setItems(FXCollections.observableArrayList(connections));
-        }
-    }
+    // loadConnectionsIntoComboBox() більше не потрібен для головної форми
 
     private void updateSchemaActionMenuItemsState() {
         boolean schemasAvailable = schemaService != null && !schemaService.getAllSchemas().isEmpty();
@@ -113,6 +113,7 @@ public class MainWindowController {
         if (saveSchemaMenuItem != null) {
             saveSchemaMenuItem.setDisable(!schemasAvailable);
         }
+        // Стан extractSchemaMenuItem оновлюється в setConnectionConfigManager та initialize
     }
 
 
@@ -136,22 +137,64 @@ public class MainWindowController {
             controller.setDialogStage(dialogStage);
             controller.setConnectionConfigManager(connectionConfigManager);
             dialogStage.showAndWait();
-            loadConnectionsIntoComboBox();
+            // Оновлюємо стан пункту меню витягнення схеми після зміни налаштувань підключень
+            if (extractSchemaMenuItem != null) {
+                extractSchemaMenuItem.setDisable(this.connectionConfigManager == null || this.connectionConfigManager.loadConnections().isEmpty());
+            }
         } catch (IOException e) {
             e.printStackTrace();
             showAlert(AlertType.ERROR, "Помилка", "Помилка завантаження вікна", "Виникла помилка: " + e.getMessage());
         }
     }
 
+    /**
+     * Обробник для пункту меню "Витягти схему з БД...".
+     * Тепер спочатку показує діалог вибору підключення.
+     */
     @FXML
     private void handleExtractSchema() {
-        final ConnectionDetails selectedConnection = connectionComboBox.getSelectionModel().getSelectedItem();
-        if (selectedConnection == null) {
-            showAlert(AlertType.WARNING, "Витягнення схеми", "Не вибрано підключення.", "Будь ласка, виберіть підключення.");
+        if (connectionConfigManager == null) {
+            showAlert(AlertType.ERROR, "Помилка конфігурації", "Менеджер конфігурацій не ініціалізовано.", "Неможливо завантажити список підключень.");
             return;
         }
-        extractSchemaButton.setDisable(true);
-        statusBarLabel.setText("Витягнення схеми для " + selectedConnection.getSchemaName() + "...");
+        List<ConnectionDetails> connections = connectionConfigManager.loadConnections();
+        if (connections.isEmpty()) {
+            showAlert(AlertType.INFORMATION, "Витягнення схеми", "Немає налаштованих підключень", "Будь ласка, спочатку налаштуйте підключення до бази даних (Файл -> Налаштування підключень...).");
+            return;
+        }
+
+        // Створюємо список імен підключень для ChoiceDialog
+        List<String> connectionNames = connections.stream()
+                .map(ConnectionDetails::getName)
+                .collect(Collectors.toList());
+
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(null, connectionNames);
+        dialog.setTitle("Вибір підключення");
+        dialog.setHeaderText("Виберіть підключення до бази даних для витягнення схеми:");
+        dialog.setContentText("Підключення:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(selectedName -> {
+            Optional<ConnectionDetails> selectedConnectionOpt = connections.stream()
+                    .filter(c -> c.getName().equals(selectedName))
+                    .findFirst();
+            if (selectedConnectionOpt.isPresent()) {
+                performSchemaExtraction(selectedConnectionOpt.get());
+            } else {
+                showAlert(AlertType.ERROR, "Помилка вибору", "Не вдалося знайти вибране підключення.", "Спробуйте ще раз.");
+            }
+        });
+    }
+
+    /**
+     * Виконує фактичне витягнення схеми після вибору підключення.
+     * @param selectedConnection Вибрані деталі підключення.
+     */
+    private void performSchemaExtraction(ConnectionDetails selectedConnection) {
+        // extractSchemaButton.setDisable(true); // Кнопки більше немає
+        if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(true); // Деактивуємо пункт меню на час операції
+        statusBarLabel.setText("Витягнення схеми для " + selectedConnection.getSchemaName() + " з " + selectedConnection.getName() + "...");
+
         Task<Schema> extractionTask = new Task<>() {
             @Override
             protected Schema call() throws Exception {
@@ -163,21 +206,42 @@ public class MainWindowController {
             final Schema extractedSchema = extractionTask.getValue();
             schemaService.addSchema(extractedSchema);
             statusBarLabel.setText("Схему '" + extractedSchema.getName() + "' успішно витягнуто/оновлено.");
-            extractSchemaButton.setDisable(false);
+            // extractSchemaButton.setDisable(false);
+            if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
             showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему '" + extractedSchema.getName() + "' витягнуто/оновлено!");
             updateSchemaActionMenuItemsState();
         });
-        extractionTask.setOnFailed(event -> handleTaskFailure(extractionTask, "витягнення схеми"));
-        extractionTask.setOnCancelled(event -> handleTaskCancellation("витягнення схеми"));
+        extractionTask.setOnFailed(event -> {
+            handleTaskFailure(extractionTask, "витягнення схеми");
+            if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
+        });
+        extractionTask.setOnCancelled(event -> {
+            handleTaskCancellation("витягнення схеми");
+            if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
+        });
         new Thread(extractionTask).start();
     }
+
 
     @FXML
     private void handleLoadSchemaFromDirectory() {
         DirectoryChooser directoryChooser = new DirectoryChooser();
         directoryChooser.setTitle("Виберіть директорію зі збереженою схемою");
+        // Відновлюємо останню використану директорію для завантаження, якщо є
+        Preferences prefs = Preferences.userNodeForPackage(MainWindowController.class);
+        String lastUsedLoadDir = prefs.get("lastLoadBaseDir", null); // Використовуємо інший ключ для завантаження
+        if (lastUsedLoadDir != null) {
+            File initialDir = new File(lastUsedLoadDir);
+            if (initialDir.isDirectory()) {
+                directoryChooser.setInitialDirectory(initialDir);
+            }
+        }
+
         File selectedDirectory = directoryChooser.showDialog(primaryStage);
         if (selectedDirectory != null) {
+            // Зберігаємо останню використану директорію для завантаження
+            prefs.put("lastLoadBaseDir", selectedDirectory.getAbsolutePath());
+
             final Path schemaDirectoryPath = selectedDirectory.toPath();
             statusBarLabel.setText("Завантаження схеми з " + schemaDirectoryPath.getFileName() + "...");
             Task<Schema> loadTask = new Task<>() {
@@ -339,23 +403,24 @@ public class MainWindowController {
         }
 
         // Формуємо запропоновану назву директорії
-        String proposedDirName = schemaToSave.getName().replaceAll("[^a-zA-Z0-9_.-]", "_") +
-                "_" +
-                schemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
-        if (schemaToSave.getSourceConnection() != null && schemaToSave.getSourceConnection().getName() != null) {
-            proposedDirName = schemaToSave.getSourceConnection().getName().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + proposedDirName;
-        } else if (schemaToSave.getCurrentSourceIdentifier() != null && schemaToSave.getCurrentSourceIdentifier().startsWith("DIR::")) {
+        String proposedDirName;
+        if (schemaToSave.getCurrentSourceIdentifier() != null && schemaToSave.getCurrentSourceIdentifier().startsWith("DIR::")) {
+            // Якщо схема була завантажена з директорії, пропонуємо ту саму назву директорії
             Path dirPath = Paths.get(schemaToSave.getCurrentSourceIdentifier().substring(5));
-            // Використовуємо назву директорії, з якої було завантажено, як частину запропонованої назви
-            // Це може бути корисно, якщо користувач хоче "перезберегти" завантажену з файлів схему під новою міткою часу
-            proposedDirName = dirPath.getFileName().toString().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_SAVED_" +
+            proposedDirName = dirPath.getFileName().toString();
+        } else {
+            // Для схем з БД або інших джерел (якщо такі будуть)
+            proposedDirName = schemaToSave.getName().replaceAll("[^a-zA-Z0-9_.-]", "_") +
+                    "_" +
                     schemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
+            if (schemaToSave.getSourceConnection() != null && schemaToSave.getSourceConnection().getName() != null) {
+                proposedDirName = schemaToSave.getSourceConnection().getName().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + proposedDirName;
+            }
         }
 
 
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/depavlo/ddlschematorfx/view/SaveSchemaDialog.fxml"));
-            // Важливо: тип кореневого елемента SaveSchemaDialog.fxml (VBox)
             VBox page = loader.load();
 
             Stage dialogStage = new Stage();
@@ -369,7 +434,6 @@ public class MainWindowController {
             controller.setDialogStage(dialogStage);
             controller.setProposedSchemaDirectoryName(proposedDirName);
 
-            // Встановлюємо початкову базову директорію (остання використана)
             Preferences prefs = Preferences.userNodeForPackage(MainWindowController.class);
             String lastUsedBaseDir = prefs.get(PREF_LAST_SAVE_BASE_DIR, null);
             if (lastUsedBaseDir != null) {
@@ -390,9 +454,7 @@ public class MainWindowController {
                     return;
                 }
 
-                // Зберігаємо останню використану базову директорію
                 prefs.put(PREF_LAST_SAVE_BASE_DIR, baseDirectoryPath.toString());
-
 
                 statusBarLabel.setText("Збереження схеми '" + schemaToSave.getName() + "'...");
                 if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
@@ -481,11 +543,13 @@ public class MainWindowController {
         alert.showAndWait();
     }
 
-    private static class ConnectionDetailsListCell extends ListCell<ConnectionDetails> {
-        @Override
-        protected void updateItem(ConnectionDetails connection, boolean empty) {
-            super.updateItem(connection, empty);
-            setText(empty || connection == null ? null : connection.getName());
-        }
-    }
+    // ConnectionDetailsListCell більше не потрібен тут, якщо ComboBox видалено з головної форми
+    // Якщо він використовується десь ще, залиште. В іншому випадку можна видалити.
+    // private static class ConnectionDetailsListCell extends ListCell<ConnectionDetails> {
+    //     @Override
+    //     protected void updateItem(ConnectionDetails connection, boolean empty) {
+    //         super.updateItem(connection, empty);
+    //         setText(empty || connection == null ? null : connection.getName());
+    //     }
+    // }
 }
