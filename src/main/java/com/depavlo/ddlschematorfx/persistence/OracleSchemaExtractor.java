@@ -11,7 +11,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-// import java.sql.Statement; // Закоментовано, якщо не використовується для SET_TRANSFORM_PARAM
+// import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +32,6 @@ public class OracleSchemaExtractor {
         if (connectionDetails.getId() == null || connectionDetails.getId().trim().isEmpty()){
             throw new IllegalArgumentException("ConnectionDetails ID must not be null or empty to create a source identifier.");
         }
-
 
         MultiKeyMap<Object, String> objectDdlsMap = new MultiKeyMap<>();
 
@@ -70,20 +69,20 @@ public class OracleSchemaExtractor {
                         String ddl = getObjectDdl(connection, objectTypeString, objectName, schemaOwnerName);
                         if (ddl != null) {
                             objectDdlsMap.put(currentObjectType, objectName, ddl);
-                            System.out.println("Витягнуто DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + ")");
+                            // System.out.println("Витягнуто DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + ")");
                         } else {
-                            System.out.println("Порожній DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + "). Пропущено.");
+                            // System.out.println("Порожній DDL для: " + currentObjectType + "/" + objectName + " (Власник: " + schemaOwnerName + "). Пропущено.");
                         }
                     }
                 }
             }
 
-            String schemaId = UUID.randomUUID().toString(); // Унікальний ID для цього екземпляра схеми
+            String schemaId = UUID.randomUUID().toString();
             LocalDateTime extractionTimestamp = LocalDateTime.now();
-            // Створюємо sourceIdentifier для схем з БД
-            String sourceIdentifier = "DB::" + connectionDetails.getId() + "::" + schemaOwnerName.toUpperCase();
+            String currentSourceIdentifier = "DB::" + connectionDetails.getId() + "::" + schemaOwnerName.toUpperCase();
 
-            return new Schema(schemaId, schemaOwnerName, objectDdlsMap, extractionTimestamp, connectionDetails, sourceIdentifier);
+            // Використовуємо конструктор, який встановлює originalSourceIdentifier = currentSourceIdentifier
+            return new Schema(schemaId, schemaOwnerName, objectDdlsMap, extractionTimestamp, connectionDetails, currentSourceIdentifier);
 
         } catch (SQLException e) {
             System.err.println("Помилка витягнення схеми '" + schemaOwnerName + "': " + e.getMessage());
@@ -145,7 +144,6 @@ public class OracleSchemaExtractor {
         try {
             return ObjectType.valueOf(normalizedType);
         } catch (IllegalArgumentException e) {
-            // Спеціальні випадки (можна розширити, якщо потрібно)
             if ("MATERIALIZED_VIEW".equals(normalizedType)) return ObjectType.MATERIALIZED_VIEW;
             if ("DATABASE_LINK".equals(normalizedType)) return ObjectType.DATABASE_LINK;
             System.err.println("Попередження: Невідомий тип об'єкта '" + objectTypeString + "' (нормалізовано як '" + normalizedType + "'). Повертається OTHER.");

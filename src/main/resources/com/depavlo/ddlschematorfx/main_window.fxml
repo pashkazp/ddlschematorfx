@@ -18,9 +18,8 @@
                 <Menu mnemonicParsing="false" text="Файл">
                     <items>
                         <MenuItem mnemonicParsing="false" text="Налаштування підключень..." onAction="#handleDbSettings" />
-                        <MenuItem mnemonicParsing="false" text="Налаштування GitLab..." />
-                        <SeparatorMenuItem mnemonicParsing="false" />
-                        <MenuItem mnemonicParsing="false" text="Зберегти активну схему як..." onAction="#handleSaveActiveSchema" />
+                        <MenuItem mnemonicParsing="false" text="Налаштування GitLab..." /> <SeparatorMenuItem mnemonicParsing="false" />
+                        <MenuItem fx:id="saveSchemaMenuItem" mnemonicParsing="false" text="Зберегти схему як..." onAction="#handleSaveSchemaAction" />
                         <SeparatorMenuItem mnemonicParsing="false" />
                         <MenuItem mnemonicParsing="false" text="Вихід" onAction="#handleExit" />
                     </items>
@@ -35,19 +34,15 @@
                 </Menu>
                 <Menu mnemonicParsing="false" text="Скрипти">
                     <items>
-                        <MenuItem mnemonicParsing="false" text="Згенерувати скрипти..." />
-                        <MenuItem mnemonicParsing="false" text="Застосувати скрипти..." />
-                    </items>
+                        <MenuItem mnemonicParsing="false" text="Згенерувати скрипти..." /> <MenuItem mnemonicParsing="false" text="Застосувати скрипти..." /> </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Аудит">
                     <items>
-                        <MenuItem mnemonicParsing="false" text="Переглянути журнал аудиту..." />
-                    </items>
+                        <MenuItem mnemonicParsing="false" text="Переглянути журнал аудиту..." /> </items>
                 </Menu>
                 <Menu mnemonicParsing="false" text="Довідка">
                     <items>
-                        <MenuItem mnemonicParsing="false" text="Про програму" />
-                    </items>
+                        <MenuItem mnemonicParsing="false" text="Про програму" /> </items>
                 </Menu>
             </menus>
         </MenuBar>

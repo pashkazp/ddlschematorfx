@@ -11,18 +11,27 @@ public class Schema {
     private MultiKeyMap<Object, String> objectDdls;
     private LocalDateTime extractionTimestamp; // Час витягнення/завантаження схеми
     private ConnectionDetails sourceConnection; // Деталі підключення-джерела (null для схем з файлів)
-    private String sourceIdentifier; // Унікальний ідентифікатор джерела схеми (наприклад, connectionId::schemaName або filePath)
+    private String currentSourceIdentifier; // Унікальний ідентифікатор поточного джерела (DB::connId::schemaName або DIR::path)
+    private String originalSourceIdentifier; // Ідентифікатор первинного джерела, якщо завантажено з meta.properties
 
-    // Конструктор
+    // Конструктор для витягнення з БД
     public Schema(String id, String name, MultiKeyMap<Object, String> objectDdls,
                   LocalDateTime extractionTimestamp, ConnectionDetails sourceConnection,
-                  String sourceIdentifier) { // Додано sourceIdentifier
+                  String currentSourceIdentifier) {
+        this(id, name, objectDdls, extractionTimestamp, sourceConnection, currentSourceIdentifier, currentSourceIdentifier); // originalSourceIdentifier = currentSourceIdentifier
+    }
+
+    // Повний конструктор
+    public Schema(String id, String name, MultiKeyMap<Object, String> objectDdls,
+                  LocalDateTime extractionTimestamp, ConnectionDetails sourceConnection,
+                  String currentSourceIdentifier, String originalSourceIdentifier) {
         this.id = id;
         this.name = name;
         this.objectDdls = (objectDdls != null) ? objectDdls : new MultiKeyMap<>();
         this.extractionTimestamp = extractionTimestamp;
         this.sourceConnection = sourceConnection;
-        this.sourceIdentifier = sourceIdentifier; // Ініціалізація нового поля
+        this.currentSourceIdentifier = currentSourceIdentifier;
+        this.originalSourceIdentifier = (originalSourceIdentifier != null) ? originalSourceIdentifier : currentSourceIdentifier;
     }
 
     // Гетери
@@ -46,9 +55,19 @@ public class Schema {
         return sourceConnection;
     }
 
-    public String getSourceIdentifier() { // Гетер для sourceIdentifier
-        return sourceIdentifier;
+    public String getCurrentSourceIdentifier() {
+        return currentSourceIdentifier;
     }
+
+    public String getOriginalSourceIdentifier() {
+        return originalSourceIdentifier;
+    }
+
+    // Сеттер для originalSourceIdentifier, може знадобитися при завантаженні з meta.properties
+    public void setOriginalSourceIdentifier(String originalSourceIdentifier) {
+        this.originalSourceIdentifier = originalSourceIdentifier;
+    }
+
 
     // Метод для додавання DDL об'єкта
     public void addObjectDdl(ObjectType objectType, String objectName, String ddl) {
@@ -61,18 +80,16 @@ public class Schema {
     @Override
     public String toString() {
         return "Schema{" +
-                "id='" + id.substring(0, Math.min(id.length(), 8)) + "...'" + // Показуємо лише частину ID
+                "id='" + id.substring(0, Math.min(id.length(), 8)) + "...'" +
                 ", name='" + name + '\'' +
-                ", sourceIdentifier='" + (sourceIdentifier != null ? sourceIdentifier : "N/A") + '\'' +
+                ", currentSourceId='" + (currentSourceIdentifier != null ? currentSourceIdentifier : "N/A") + '\'' +
+                (originalSourceIdentifier != null && !originalSourceIdentifier.equals(currentSourceIdentifier) ? ", originalSourceId='" + originalSourceIdentifier + '\'' : "") +
                 ", objectCount=" + (objectDdls != null ? objectDdls.size() : 0) +
                 ", extractionTimestamp=" + extractionTimestamp +
                 ", sourceConnectionName='" + (sourceConnection != null ? sourceConnection.getName() : "N/A") + '\'' +
                 '}';
     }
 
-    // equals та hashCode тепер базуються на ID екземпляра, що є правильним.
-    // sourceIdentifier не повинен впливати на equals/hashCode самого об'єкта Schema,
-    // він використовується для логіки заміни в SchemaService.
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
