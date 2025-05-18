@@ -16,10 +16,10 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.ButtonType; // Для діалогу підтвердження
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ChoiceDialog;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell; // Не використовується, якщо ConnectionDetailsListCell видалено
+// import javafx.scene.control.ListCell; // Закоментовано, якщо ConnectionDetailsListCell не використовується
 import javafx.scene.control.MenuItem;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.VBox;
@@ -33,7 +33,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.SQLException; // Не використовується напряму, але може бути потрібним для OracleSchemaExtractor
+// import java.sql.SQLException; // Не використовується напряму
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +72,7 @@ public class MainWindowController {
         if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
         if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(true);
         if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(true);
+        // Стан extractSchemaMenuItem буде оновлено в setConnectionConfigManager
     }
 
     public void setPrimaryStage(Stage primaryStage) {
@@ -101,18 +102,18 @@ public class MainWindowController {
 
     private void updateSchemaActionMenuItemsState() {
         List<Schema> allSchemas = (schemaService != null) ? schemaService.getAllSchemas() : new ArrayList<>();
-        boolean schemasAvailable = !allSchemas.isEmpty();
-        boolean enoughSchemasForComparison = allSchemas.size() >= 2;
+        boolean activeSchemaAvailable = activeSchema != null; // Використовуємо activeSchema для визначення доступності деяких дій
 
         if (compareSchemasMenuItem != null) {
-            compareSchemasMenuItem.setDisable(!enoughSchemasForComparison);
+            compareSchemasMenuItem.setDisable(allSchemas.size() < 2);
         }
-        if (saveSchemaMenuItem != null) {
-            saveSchemaMenuItem.setDisable(!schemasAvailable);
+        if (saveSchemaMenuItem != null) { // "Зберегти як..."
+            saveSchemaMenuItem.setDisable(!activeSchemaAvailable); // Активно, якщо є активна схема
         }
-        if (saveSchemaDirectMenuItem != null) {
-            saveSchemaDirectMenuItem.setDisable(!(activeSchema != null && activeSchema.getLastSavedPath() != null));
+        if (saveSchemaDirectMenuItem != null) { // "Зберегти"
+            saveSchemaDirectMenuItem.setDisable(!(activeSchemaAvailable && activeSchema.getLastSavedPath() != null));
         }
+        // Стан extractSchemaMenuItem оновлюється в setConnectionConfigManager та handleDbSettings
     }
 
     @FXML
@@ -187,16 +188,16 @@ public class MainWindowController {
             schemaService.addSchema(extractedSchema);
             setActiveSchema(extractedSchema);
             statusBarLabel.setText("Схему '" + extractedSchema.getName() + "' успішно витягнуто/оновлено.");
-            if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
             showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему '" + extractedSchema.getName() + "' витягнуто/оновлено!");
         });
-        extractionTask.setOnFailed(event -> {
-            handleTaskFailure(extractionTask, "витягнення схеми");
-            if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
-        });
-        extractionTask.setOnCancelled(event -> {
-            handleTaskCancellation("витягнення схеми");
-            if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
+        extractionTask.setOnFailed(event -> handleTaskFailure(extractionTask, "витягнення схеми"));
+        extractionTask.setOnCancelled(event -> handleTaskCancellation("витягнення схеми"));
+
+        extractionTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
+            if (!isRunning) {
+                if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
+                updateSchemaActionMenuItemsState(); // Оновлюємо стан всіх залежних меню
+            }
         });
         new Thread(extractionTask).start();
     }
@@ -234,6 +235,13 @@ public class MainWindowController {
             });
             loadTask.setOnFailed(event -> handleTaskFailure(loadTask, "завантаження схеми з директорії"));
             loadTask.setOnCancelled(event -> handleTaskCancellation("завантаження схеми з директорії"));
+
+            // Оновлення стану меню після завершення завдання
+            loadTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
+                if (!isRunning) {
+                    updateSchemaActionMenuItemsState();
+                }
+            });
             new Thread(loadTask).start();
         } else {
             statusBarLabel.setText("Завантаження схеми скасовано.");
@@ -276,8 +284,7 @@ public class MainWindowController {
 
         saveTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
             if (!isRunning) {
-                if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(false);
-                if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
+                // saveSchemaDirectMenuItem та saveSchemaMenuItem будуть оновлені через updateSchemaActionMenuItemsState
                 updateSchemaActionMenuItemsState();
             }
         });
@@ -287,43 +294,51 @@ public class MainWindowController {
 
     @FXML
     private void handleSaveSchemaAction() { // "Зберегти схему як..."
-        List<Schema> availableSchemas = schemaService.getAllSchemas();
-        if (availableSchemas.isEmpty()) {
-            showAlert(AlertType.WARNING, "Збереження схеми", "Немає доступних схем", null);
-            return;
-        }
-
-        List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
-        ChoiceDialog<String> schemaChoiceDialog = new ChoiceDialog<>(activeSchema != null ? getSchemaDisplayName(activeSchema) : null, schemaDisplayNames);
-        schemaChoiceDialog.setTitle("Вибір схеми для збереження");
-        schemaChoiceDialog.setHeaderText("Виберіть схему, яку потрібно зберегти:");
-        schemaChoiceDialog.setContentText("Схема:");
-        Optional<String> chosenSchemaResult = schemaChoiceDialog.showAndWait();
-
-        if (chosenSchemaResult.isEmpty()) {
-            statusBarLabel.setText("Збереження скасовано.");
-            return;
-        }
-
-        final Schema schemaToSave = findSchemaByDisplayName(chosenSchemaResult.get(), availableSchemas);
+        // Спочатку вибираємо схему, якщо їх декілька або активна не встановлена
+        Schema schemaToSave = activeSchema;
         if (schemaToSave == null) {
-            showAlert(AlertType.ERROR, "Збереження схеми", "Помилка вибору", null);
+            List<Schema> availableSchemas = schemaService.getAllSchemas();
+            if (availableSchemas.isEmpty()) {
+                showAlert(AlertType.WARNING, "Збереження схеми", "Немає доступних схем", null);
+                return;
+            }
+            if (availableSchemas.size() == 1) {
+                schemaToSave = availableSchemas.get(0);
+            } else {
+                List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
+                ChoiceDialog<String> schemaChoiceDialog = new ChoiceDialog<>(null, schemaDisplayNames);
+                schemaChoiceDialog.setTitle("Вибір схеми для збереження");
+                schemaChoiceDialog.setHeaderText("Виберіть схему, яку потрібно зберегти:");
+                schemaChoiceDialog.setContentText("Схема:");
+                Optional<String> chosenSchemaResult = schemaChoiceDialog.showAndWait();
+
+                if (chosenSchemaResult.isEmpty()) {
+                    statusBarLabel.setText("Збереження скасовано.");
+                    return;
+                }
+                schemaToSave = findSchemaByDisplayName(chosenSchemaResult.get(), availableSchemas);
+            }
+        }
+
+        if (schemaToSave == null) {
+            showAlert(AlertType.ERROR, "Збереження схеми", "Помилка вибору", "Не вдалося визначити схему для збереження.");
             return;
         }
-        setActiveSchema(schemaToSave);
+        final Schema finalSchemaToSave = schemaToSave; // Для використання в лямбдах
+        setActiveSchema(finalSchemaToSave); // Встановлюємо вибрану/активну схему
 
+        // Формуємо запропоновану назву директорії
         String proposedDirName;
-        if (schemaToSave.getLastSavedPath() != null &&
-                schemaToSave.getCurrentSourceIdentifier() != null &&
-                schemaToSave.getCurrentSourceIdentifier().startsWith("DIR::") &&
-                schemaToSave.getLastSavedPath().toString().equals(schemaToSave.getCurrentSourceIdentifier().substring(5))) {
-            proposedDirName = schemaToSave.getLastSavedPath().getFileName().toString();
+        if (finalSchemaToSave.getLastSavedPath() != null) {
+            // Якщо схема вже зберігалася, пропонуємо її останню назву директорії
+            proposedDirName = finalSchemaToSave.getLastSavedPath().getFileName().toString();
         } else {
-            proposedDirName = schemaToSave.getName().replaceAll("[^a-zA-Z0-9_.-]", "_") +
+            // Для нових схем (з БД, ще не збережених)
+            proposedDirName = finalSchemaToSave.getName().replaceAll("[^a-zA-Z0-9_.-]", "_") +
                     "_" +
-                    schemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
-            if (schemaToSave.getSourceConnection() != null && schemaToSave.getSourceConnection().getName() != null) {
-                proposedDirName = schemaToSave.getSourceConnection().getName().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + proposedDirName;
+                    finalSchemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
+            if (finalSchemaToSave.getSourceConnection() != null && finalSchemaToSave.getSourceConnection().getName() != null) {
+                proposedDirName = finalSchemaToSave.getSourceConnection().getName().replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + proposedDirName;
             }
         }
 
@@ -377,7 +392,7 @@ public class MainWindowController {
 
                 prefs.put(PREF_LAST_SAVE_BASE_DIR, baseDirectoryPath.toString());
 
-                statusBarLabel.setText("Збереження схеми '" + schemaToSave.getName() + "' як '" + finalSchemaDirectoryName + "'...");
+                statusBarLabel.setText("Збереження схеми '" + finalSchemaToSave.getName() + "' як '" + finalSchemaDirectoryName + "'...");
                 if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
                 if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(true);
 
@@ -387,15 +402,15 @@ public class MainWindowController {
                         if (Files.exists(targetSchemaDir)) {
                             schemaService.clearDirectory(targetSchemaDir);
                         }
-                        schemaService.saveSchemaToFile(schemaToSave, baseDirectoryPath, finalSchemaDirectoryName);
+                        schemaService.saveSchemaToFile(finalSchemaToSave, baseDirectoryPath, finalSchemaDirectoryName);
                         return null;
                     }
                 };
 
                 saveTask.setOnSucceeded(event -> {
-                    schemaToSave.setLastSavedPath(targetSchemaDir);
-                    setActiveSchema(schemaToSave);
-                    statusBarLabel.setText("Схему '" + schemaToSave.getName() + "' успішно збережено як '" + finalSchemaDirectoryName + "'.");
+                    finalSchemaToSave.setLastSavedPath(targetSchemaDir);
+                    setActiveSchema(finalSchemaToSave);
+                    statusBarLabel.setText("Схему '" + finalSchemaToSave.getName() + "' успішно збережено як '" + finalSchemaDirectoryName + "'.");
                     showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему збережено в:\n" + targetSchemaDir.toString());
                 });
                 saveTask.setOnFailed(event -> handleTaskFailure(saveTask, "збереження схеми (як)"));
@@ -403,9 +418,7 @@ public class MainWindowController {
 
                 saveTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
                     if (!isRunning) {
-                        if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(false);
-                        if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(false);
-                        updateSchemaActionMenuItemsState();
+                        updateSchemaActionMenuItemsState(); // Оновлюємо стан всіх меню
                     }
                 });
                 new Thread(saveTask).start();
@@ -427,7 +440,7 @@ public class MainWindowController {
         }
 
         List<String> schemaDisplayNames = availableSchemas.stream()
-                .map(this::getSchemaDisplayName) // Виклик методу
+                .map(this::getSchemaDisplayName)
                 .collect(Collectors.toList());
 
         String defaultSource = (activeSchema != null && availableSchemas.contains(activeSchema)) ? getSchemaDisplayName(activeSchema) : null;
@@ -441,7 +454,7 @@ public class MainWindowController {
             statusBarLabel.setText("Порівняння скасовано.");
             return;
         }
-        final Schema sourceSchema = findSchemaByDisplayName(sourceResult.get(), availableSchemas); // Виклик методу
+        final Schema sourceSchema = findSchemaByDisplayName(sourceResult.get(), availableSchemas);
         if(sourceSchema != null) setActiveSchema(sourceSchema);
 
         List<String> targetSchemaDisplayNames = schemaDisplayNames.stream()
@@ -461,7 +474,7 @@ public class MainWindowController {
             statusBarLabel.setText("Порівняння скасовано.");
             return;
         }
-        final Schema targetSchema = findSchemaByDisplayName(targetResult.get(), availableSchemas); // Виклик методу
+        final Schema targetSchema = findSchemaByDisplayName(targetResult.get(), availableSchemas);
 
         if (sourceSchema == null || targetSchema == null) {
             showAlert(AlertType.ERROR, "Порівняння схем", "Помилка вибору схем", "Не вдалося знайти вибрані схеми.");
@@ -550,14 +563,13 @@ public class MainWindowController {
         alert.showAndWait();
     }
 
-    // Методи getSchemaDisplayName та findSchemaByDisplayName визначені тут
     private String getSchemaDisplayName(Schema schema) {
         if (schema == null) return "N/A";
         String sourceInfo = "N/A";
         if (schema.getCurrentSourceIdentifier() != null) {
             if (schema.getCurrentSourceIdentifier().startsWith("DB::")) {
                 sourceInfo = "DB: " + schema.getName();
-                if (schema.getSourceConnection() != null && schema.getSourceConnection().getName() != null) { // Додано перевірку на null
+                if (schema.getSourceConnection() != null && schema.getSourceConnection().getName() != null) {
                     sourceInfo = "DB: " + schema.getSourceConnection().getName() + "/" + schema.getName();
                 }
             } else if (schema.getCurrentSourceIdentifier().startsWith("DIR::")) {
@@ -565,7 +577,6 @@ public class MainWindowController {
                 sourceInfo = "DIR: " + dirPath.getFileName().toString();
             }
         }
-        // Додано перевірку на null для schema.getId() перед викликом substring
         String schemaIdPart = (schema.getId() != null && schema.getId().length() >= 8) ? schema.getId().substring(0, 8) : "N/A";
         return schema.getName() + " (" + sourceInfo + ", ID: " + schemaIdPart + "...)";
     }
@@ -573,7 +584,7 @@ public class MainWindowController {
     private Schema findSchemaByDisplayName(String displayName, List<Schema> schemas) {
         if (displayName == null || schemas == null) return null;
         for (Schema schema : schemas) {
-            if (schema != null && displayName.equals(getSchemaDisplayName(schema))) { // Перевірка schema на null
+            if (schema != null && displayName.equals(getSchemaDisplayName(schema))) {
                 return schema;
             }
         }

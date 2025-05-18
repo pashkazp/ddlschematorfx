@@ -60,6 +60,7 @@
     </bottom>
 
     <center>
+        <Label text="DDL Schemator FX" style="-fx-font-size: 24px; -fx-text-fill: grey;" />
     </center>
 
 </BorderPane>
