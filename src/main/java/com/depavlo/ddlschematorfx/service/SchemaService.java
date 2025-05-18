@@ -7,14 +7,14 @@ import org.apache.commons.collections4.map.MultiKeyMap;
 import org.apache.commons.collections4.keyvalue.MultiKey;
 
 import java.io.BufferedWriter;
-import java.io.File; // Для роботи з файлами при очищенні директорії
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream; // Для ітерації по вмісту директорії
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Comparator; // Для сортування файлів перед видаленням (зворотний порядок)
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,26 +85,18 @@ public class SchemaService {
         System.out.println("Сховище схем очищено.");
     }
 
-    /**
-     * Рекурсивно видаляє весь вміст директорії (файли та піддиректорії).
-     * Сама директорія не видаляється.
-     * @param directoryPath Шлях до директорії для очищення.
-     * @throws IOException Якщо виникає помилка при видаленні.
-     */
     public void clearDirectory(Path directoryPath) throws IOException {
         if (Files.exists(directoryPath) && Files.isDirectory(directoryPath)) {
             System.out.println("Очищення директорії: " + directoryPath);
-            // Використовуємо Files.walk для рекурсивного обходу, сортуємо у зворотному порядку, щоб спочатку видалялися файли, потім директорії
             try (Stream<Path> walk = Files.walk(directoryPath)) {
                 walk.sorted(Comparator.reverseOrder())
-                        .filter(path -> !path.equals(directoryPath)) // Не видаляємо саму кореневу директорію
+                        .filter(path -> !path.equals(directoryPath))
                         .forEach(path -> {
                             try {
                                 Files.delete(path);
                                 System.out.println("Видалено: " + path);
                             } catch (IOException e) {
                                 System.err.println("Не вдалося видалити " + path + ": " + e.getMessage());
-                                // Можна кинути RuntimeException, якщо критично, або продовжити
                             }
                         });
             }
@@ -112,9 +104,7 @@ public class SchemaService {
         } else if (Files.exists(directoryPath) && !Files.isDirectory(directoryPath)) {
             throw new IOException("Вказаний шлях не є директорією: " + directoryPath);
         }
-        // Якщо директорія не існує, нічого не робимо
     }
-
 
     public void saveSchemaToFile(Schema schema, Path baseDirectoryPath, String schemaDirectoryName) throws IOException {
         if (schema == null || baseDirectoryPath == null || schemaDirectoryName == null || schemaDirectoryName.trim().isEmpty()) {
@@ -122,9 +112,6 @@ public class SchemaService {
         }
 
         Path schemaDirectory = baseDirectoryPath.resolve(schemaDirectoryName);
-        // Директорія тепер створюється (або перевіряється на існування) перед викликом цього методу,
-        // і очищується також перед викликом, якщо це операція "Зберегти" на існуючий шлях.
-        // Тут ми просто гарантуємо, що вона існує.
         Files.createDirectories(schemaDirectory);
         System.out.println("Використання/створення директорії для схеми: " + schemaDirectory.toAbsolutePath());
 
@@ -135,14 +122,34 @@ public class SchemaService {
         if (schema.getSourceConnection() != null && schema.getSourceConnection().getName() != null) {
             metaProps.setProperty(KEY_ORIGINAL_CONN_NAME, schema.getSourceConnection().getName());
         } else {
-            metaProps.setProperty(KEY_ORIGINAL_CONN_NAME, "N/A_OR_FROM_FILE");
+            // Якщо sourceConnection немає (наприклад, схема була завантажена з файлів),
+            // можна спробувати взяти originalConnectionName з originalSourceIdentifier, якщо він є і це DB-схема
+            String origSrcId = schema.getOriginalSourceIdentifier();
+            if (origSrcId != null && origSrcId.startsWith("DB::")) {
+                String[] parts = origSrcId.split("::");
+                if (parts.length > 1) { // parts[1] - це connectionId, нам потрібна назва, яку ми не зберігаємо напряму в sourceId
+                    // На жаль, назву з'єднання ми не зберігаємо в originalSourceIdentifier напряму.
+                    // Тому тут буде N/A або можна залишити як було.
+                    metaProps.setProperty(KEY_ORIGINAL_CONN_NAME, "N/A_FROM_ORIGINAL_FILE_LOAD");
+                } else {
+                    metaProps.setProperty(KEY_ORIGINAL_CONN_NAME, "N/A_OR_FROM_FILE");
+                }
+            } else {
+                metaProps.setProperty(KEY_ORIGINAL_CONN_NAME, "N/A_OR_FROM_FILE");
+            }
         }
-        if (schema.getCurrentSourceIdentifier() != null) {
-            metaProps.setProperty(KEY_CURRENT_SOURCE_ID, schema.getCurrentSourceIdentifier());
-        }
+
+        // KEY_CURRENT_SOURCE_ID завжди відображає поточне місце збереження
+        String currentSavePathIdentifier = "DIR::" + schemaDirectory.toAbsolutePath().toString();
+        metaProps.setProperty(KEY_CURRENT_SOURCE_ID, currentSavePathIdentifier);
+
         if (schema.getOriginalSourceIdentifier() != null) {
             metaProps.setProperty(KEY_ORIGINAL_SOURCE_ID, schema.getOriginalSourceIdentifier());
+        } else {
+            // Якщо originalSourceIdentifier не було, то поточне місце стає і оригінальним
+            metaProps.setProperty(KEY_ORIGINAL_SOURCE_ID, currentSavePathIdentifier);
         }
+
 
         Path metaFilePath = schemaDirectory.resolve(META_PROPERTIES_FILE);
         try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(metaFilePath.toFile()), StandardCharsets.UTF_8)) {
@@ -197,6 +204,10 @@ public class SchemaService {
         String schemaNameFromFile = metaProps.getProperty(KEY_SCHEMA_NAME);
         String timestampString = metaProps.getProperty(KEY_EXTRACTION_TIMESTAMP);
         String originalSourceIdFromFile = metaProps.getProperty(KEY_ORIGINAL_SOURCE_ID);
+        // currentSourceIdentifier з meta.properties тепер може бути корисним для originalSourceIdentifier,
+        // але для самого завантаженого об'єкта currentSourceIdentifier буде DIR::шлях
+        // String currentSourceIdFromMeta = metaProps.getProperty(KEY_CURRENT_SOURCE_ID);
+
 
         if (schemaNameFromFile == null || schemaNameFromFile.trim().isEmpty()) {
             throw new IOException("Властивість '" + KEY_SCHEMA_NAME + "' не знайдена або порожня у " + META_PROPERTIES_FILE);
@@ -245,7 +256,10 @@ public class SchemaService {
 
         String schemaId = UUID.randomUUID().toString();
         String currentSourceIdentifierForThisLoad = "DIR::" + schemaDirectoryPath.toAbsolutePath().toString();
-        // При завантаженні з директорії, sourceConnection встановлюємо в null
-        return new Schema(schemaId, schemaNameFromFile, objectDdls, extractionTimestampFromFile, null, currentSourceIdentifierForThisLoad, originalSourceIdFromFile);
+
+        // Якщо originalSourceIdFromFile відсутній у meta.properties, то currentSourceIdentifierForThisLoad стає і оригінальним
+        String finalOriginalSourceId = (originalSourceIdFromFile != null && !originalSourceIdFromFile.trim().isEmpty()) ? originalSourceIdFromFile : currentSourceIdentifierForThisLoad;
+
+        return new Schema(schemaId, schemaNameFromFile, objectDdls, extractionTimestampFromFile, null, currentSourceIdentifierForThisLoad, finalOriginalSourceId);
     }
 }

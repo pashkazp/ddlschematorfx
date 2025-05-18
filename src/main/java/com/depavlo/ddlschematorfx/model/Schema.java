@@ -2,18 +2,18 @@ package com.depavlo.ddlschematorfx.model;
 
 import org.apache.commons.collections4.map.MultiKeyMap;
 
-import java.nio.file.Path; // Імпорт для Path
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
 public class Schema {
-    private String id;
-    private String name;
+    private String id; // Унікальний UUID ідентифікатор екземпляра схеми в пам'яті
+    private String name; // Назва схеми (власник)
     private MultiKeyMap<Object, String> objectDdls;
-    private LocalDateTime extractionTimestamp;
-    private ConnectionDetails sourceConnection;
-    private String currentSourceIdentifier;
-    private String originalSourceIdentifier;
+    private LocalDateTime extractionTimestamp; // Час витягнення/завантаження схеми
+    private ConnectionDetails sourceConnection; // Деталі підключення-джерела (null для схем з файлів)
+    private String currentSourceIdentifier; // Унікальний ідентифікатор поточного джерела (DB::connId::schemaName або DIR::path)
+    private String originalSourceIdentifier; // Ідентифікатор первинного джерела, якщо завантажено з meta.properties
     private Path lastSavedPath; // Шлях до директорії, куди схему було востаннє збережено
 
     // Конструктор для витягнення з БД
@@ -74,7 +74,7 @@ public class Schema {
         return originalSourceIdentifier;
     }
 
-    public Path getLastSavedPath() { // Гетер для lastSavedPath
+    public Path getLastSavedPath() {
         return lastSavedPath;
     }
 
@@ -83,8 +83,18 @@ public class Schema {
         this.originalSourceIdentifier = originalSourceIdentifier;
     }
 
-    public void setLastSavedPath(Path lastSavedPath) { // Сеттер для lastSavedPath
+    public void setLastSavedPath(Path lastSavedPath) {
         this.lastSavedPath = lastSavedPath;
+    }
+
+    /**
+     * Встановлює поточний ідентифікатор джерела схеми.
+     * Використовується, наприклад, після операції "Зберегти як...",
+     * щоб відобразити нове місцезнаходження схеми.
+     * @param currentSourceIdentifier Новий поточний ідентифікатор джерела.
+     */
+    public void setCurrentSourceIdentifier(String currentSourceIdentifier) { // ДОДАНО СЕТТЕР
+        this.currentSourceIdentifier = currentSourceIdentifier;
     }
 
 
@@ -102,7 +112,7 @@ public class Schema {
                 ", name='" + name + '\'' +
                 ", currentSourceId='" + (currentSourceIdentifier != null ? currentSourceIdentifier : "N/A") + '\'' +
                 (originalSourceIdentifier != null && !originalSourceIdentifier.equals(currentSourceIdentifier) ? ", originalSourceId='" + originalSourceIdentifier + '\'' : "") +
-                (lastSavedPath != null ? ", lastSavedPath='" + lastSavedPath.toString() + '\'' : "") + // Додано lastSavedPath
+                (lastSavedPath != null ? ", lastSavedPath='" + lastSavedPath.toString() + '\'' : "") +
                 ", objectCount=" + (objectDdls != null ? objectDdls.size() : 0) +
                 ", extractionTimestamp=" + extractionTimestamp +
                 ", sourceConnectionName='" + (sourceConnection != null ? sourceConnection.getName() : "N/A") + '\'' +

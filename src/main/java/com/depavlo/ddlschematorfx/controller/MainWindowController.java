@@ -88,7 +88,7 @@ public class MainWindowController {
 
     public void setSchemaService(SchemaService schemaService) {
         this.schemaService = schemaService;
-        updateSchemaActionMenuItemsState();
+        updateSchemaActionMenuItemsState(); // Оновлюємо стан меню після ініціалізації сервісу
     }
 
     public void setSchemaComparisonService(SchemaComparisonService schemaComparisonService) {
@@ -102,7 +102,7 @@ public class MainWindowController {
 
     private void updateSchemaActionMenuItemsState() {
         List<Schema> allSchemas = (schemaService != null) ? schemaService.getAllSchemas() : new ArrayList<>();
-        boolean activeSchemaAvailable = activeSchema != null; // Використовуємо activeSchema для визначення доступності деяких дій
+        boolean activeSchemaAvailable = activeSchema != null;
 
         if (compareSchemasMenuItem != null) {
             compareSchemasMenuItem.setDisable(allSchemas.size() < 2);
@@ -196,7 +196,7 @@ public class MainWindowController {
         extractionTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
             if (!isRunning) {
                 if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(false);
-                updateSchemaActionMenuItemsState(); // Оновлюємо стан всіх залежних меню
+                updateSchemaActionMenuItemsState();
             }
         });
         new Thread(extractionTask).start();
@@ -236,7 +236,6 @@ public class MainWindowController {
             loadTask.setOnFailed(event -> handleTaskFailure(loadTask, "завантаження схеми з директорії"));
             loadTask.setOnCancelled(event -> handleTaskCancellation("завантаження схеми з директорії"));
 
-            // Оновлення стану меню після завершення завдання
             loadTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
                 if (!isRunning) {
                     updateSchemaActionMenuItemsState();
@@ -278,13 +277,23 @@ public class MainWindowController {
         saveTask.setOnSucceeded(event -> {
             statusBarLabel.setText("Схему '" + schemaToSave.getName() + "' успішно збережено у '" + targetPath.getFileName() + "'.");
             showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему '" + schemaToSave.getName() + "' успішно збережено.");
+            // Оновлюємо currentSourceIdentifier, оскільки вміст за цим шляхом оновлено
+            // OriginalSourceIdentifier залишається тим самим.
+            // Важливо: `setCurrentSourceIdentifier` має бути методом в класі Schema, якщо його немає, треба додати.
+            // Або, якщо `currentSourceIdentifier` завжди "DIR::шлях" для збережених, то це оновлення може бути не потрібне
+            // якщо `SchemaService.saveSchemaToFile` вже правильно встановлює це в meta.properties.
+            // Поточна логіка `SchemaService.saveSchemaToFile` вже зберігає правильний currentSourceIdentifier в meta.properties.
+            // Тому тут оновлювати об'єкт в пам'яті не обов'язково, якщо він не буде знову завантажуватися з цього ж місця без перезапуску.
+            // Але для консистентності стану в пам'яті, якщо цей об'єкт буде далі використовуватися, оновити можна:
+            schemaToSave.setCurrentSourceIdentifier("DIR::" + targetPath.toAbsolutePath().toString());
+            // setActiveSchema(schemaToSave); // Активна схема не змінилась, лише її стан (якщо currentSourceIdentifier є частиною її "активності")
+            // updateSchemaActionMenuItemsState() викликається в runningProperty listener
         });
         saveTask.setOnFailed(event -> handleTaskFailure(saveTask, "збереження схеми (перезапис)"));
         saveTask.setOnCancelled(event -> handleTaskCancellation("збереження схеми (перезапис)"));
 
         saveTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
             if (!isRunning) {
-                // saveSchemaDirectMenuItem та saveSchemaMenuItem будуть оновлені через updateSchemaActionMenuItemsState
                 updateSchemaActionMenuItemsState();
             }
         });
@@ -294,7 +303,6 @@ public class MainWindowController {
 
     @FXML
     private void handleSaveSchemaAction() { // "Зберегти схему як..."
-        // Спочатку вибираємо схему, якщо їх декілька або активна не встановлена
         Schema schemaToSave = activeSchema;
         if (schemaToSave == null) {
             List<Schema> availableSchemas = schemaService.getAllSchemas();
@@ -324,16 +332,16 @@ public class MainWindowController {
             showAlert(AlertType.ERROR, "Збереження схеми", "Помилка вибору", "Не вдалося визначити схему для збереження.");
             return;
         }
-        final Schema finalSchemaToSave = schemaToSave; // Для використання в лямбдах
-        setActiveSchema(finalSchemaToSave); // Встановлюємо вибрану/активну схему
+        final Schema finalSchemaToSave = schemaToSave;
+        // setActiveSchema(finalSchemaToSave); // Встановлюємо активну схему вже після успішного збереження "як"
 
-        // Формуємо запропоновану назву директорії
         String proposedDirName;
+        // Якщо схема вже має lastSavedPath (була збережена або завантажена з файлів),
+        // пропонуємо назву цієї директорії для "Зберегти як..."
         if (finalSchemaToSave.getLastSavedPath() != null) {
-            // Якщо схема вже зберігалася, пропонуємо її останню назву директорії
             proposedDirName = finalSchemaToSave.getLastSavedPath().getFileName().toString();
         } else {
-            // Для нових схем (з БД, ще не збережених)
+            // Для нових схем (з БД, ще не збережених) або якщо lastSavedPath чомусь null
             proposedDirName = finalSchemaToSave.getName().replaceAll("[^a-zA-Z0-9_.-]", "_") +
                     "_" +
                     finalSchemaToSave.getExtractionTimestamp().format(DIRECTORY_TIMESTAMP_FORMATTER);
@@ -409,6 +417,21 @@ public class MainWindowController {
 
                 saveTask.setOnSucceeded(event -> {
                     finalSchemaToSave.setLastSavedPath(targetSchemaDir);
+                    // Оновлюємо currentSourceIdentifier об'єкта в пам'яті, оскільки це нове місце збереження
+                    finalSchemaToSave.setCurrentSourceIdentifier("DIR::" + targetSchemaDir.toAbsolutePath().toString());
+                    // OriginalSourceIdentifier залишається тим, яким він був до цієї операції "Зберегти як..."
+                    // або встановлюється як current, якщо original був null
+                    if (finalSchemaToSave.getOriginalSourceIdentifier() == null ||
+                            finalSchemaToSave.getOriginalSourceIdentifier().startsWith("DB::") || // Якщо оригінал був з БД
+                            !finalSchemaToSave.getOriginalSourceIdentifier().equals(finalSchemaToSave.getCurrentSourceIdentifier())) { // або якщо це дійсно нове місце
+                        // Якщо originalSourceIdentifier не був встановлений або був з БД,
+                        // то нове місце стає і original (для майбутніх завантажень з цього місця).
+                        // Або якщо ми зберігаємо в дійсно нове місце, то original не міняємо, він зберігає первинне джерело.
+                        // Поточна логіка Schema.java та SchemaService.saveSchemaToFile вже має це враховувати
+                        // при записі originalSourceIdentifier в meta.properties.
+                        // Тут головне оновити currentSourceIdentifier і lastSavedPath.
+                    }
+
                     setActiveSchema(finalSchemaToSave);
                     statusBarLabel.setText("Схему '" + finalSchemaToSave.getName() + "' успішно збережено як '" + finalSchemaDirectoryName + "'.");
                     showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему збережено в:\n" + targetSchemaDir.toString());
@@ -418,7 +441,7 @@ public class MainWindowController {
 
                 saveTask.runningProperty().addListener((obs, wasRunning, isRunning) -> {
                     if (!isRunning) {
-                        updateSchemaActionMenuItemsState(); // Оновлюємо стан всіх меню
+                        updateSchemaActionMenuItemsState();
                     }
                 });
                 new Thread(saveTask).start();
