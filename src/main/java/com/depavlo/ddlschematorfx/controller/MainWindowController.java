@@ -70,6 +70,7 @@ public class MainWindowController {
         if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
         if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(true);
         if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(true);
+        // Стан extractSchemaMenuItem буде оновлено в setConnectionConfigManager
     }
 
     public void setPrimaryStage(Stage primaryStage) {
@@ -85,7 +86,7 @@ public class MainWindowController {
 
     public void setSchemaService(SchemaService schemaService) {
         this.schemaService = schemaService;
-        updateSchemaActionMenuItemsState();
+        updateSchemaActionMenuItemsState(); // Оновлюємо стан меню після ініціалізації сервісу
     }
 
     public void setSchemaComparisonService(SchemaComparisonService schemaComparisonService) {
@@ -99,18 +100,18 @@ public class MainWindowController {
 
     private void updateSchemaActionMenuItemsState() {
         List<Schema> allSchemas = (schemaService != null) ? schemaService.getAllSchemas() : new ArrayList<>();
-        boolean activeSchemaAvailable = activeSchema != null;
+        // "Активна" схема для дій збереження - це `this.activeSchema`
+        // Якщо this.activeSchema == null, то дії збереження (пряме і "як") будуть неактивні.
+        boolean activeSchemaAvailableForSave = this.activeSchema != null;
 
         if (compareSchemasMenuItem != null) {
             compareSchemasMenuItem.setDisable(allSchemas.size() < 2);
         }
-        if (saveSchemaMenuItem != null) {
-            saveSchemaMenuItem.setDisable(!activeSchemaAvailable);
+        if (saveSchemaMenuItem != null) { // "Зберегти як..."
+            saveSchemaMenuItem.setDisable(!activeSchemaAvailableForSave);
         }
-        if (saveSchemaDirectMenuItem != null) {
-            // "Зберегти" активно, якщо є активна схема (неважливо, чи зберігалася вона раніше,
-            // оскільки якщо не зберігалася, "Зберегти" спрацює як "Зберегти як...")
-            saveSchemaDirectMenuItem.setDisable(!activeSchemaAvailable);
+        if (saveSchemaDirectMenuItem != null) { // "Зберегти"
+            saveSchemaDirectMenuItem.setDisable(!activeSchemaAvailableForSave);
         }
     }
 
@@ -184,7 +185,7 @@ public class MainWindowController {
         extractionTask.setOnSucceeded(event -> {
             final Schema extractedSchema = extractionTask.getValue();
             schemaService.addSchema(extractedSchema);
-            setActiveSchema(extractedSchema);
+            setActiveSchema(extractedSchema); // Встановлюємо витягнуту схему як активну
             statusBarLabel.setText("Схему '" + extractedSchema.getName() + "' успішно витягнуто/оновлено.");
             showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему '" + extractedSchema.getName() + "' витягнуто/оновлено!");
         });
@@ -227,7 +228,7 @@ public class MainWindowController {
                 final Schema loadedSchema = loadTask.getValue();
                 loadedSchema.setLastSavedPath(schemaDirectoryPath);
                 schemaService.addSchema(loadedSchema);
-                setActiveSchema(loadedSchema);
+                setActiveSchema(loadedSchema); // Встановлюємо завантажену схему як активну
                 statusBarLabel.setText("Схему '" + loadedSchema.getName() + "' успішно завантажено/оновлено.");
                 showAlert(AlertType.INFORMATION, "Завантаження схеми", "Успіх", "Схему '" + loadedSchema.getName() + "' завантажено/оновлено.");
             });
@@ -246,14 +247,12 @@ public class MainWindowController {
     }
 
     /**
-     * Визначає, яку схему зберегти (активну або вибирає зі списку).
-     * @return Optional<Schema> обрана схема, або Optional.empty(), якщо вибір скасовано.
+     * Визначає, яку схему зберегти, пропонуючи вибір, якщо потрібно.
+     * Встановлює вибрану схему як activeSchema.
+     * @param dialogTitleHeader Заголовок для діалогу вибору схеми.
+     * @return Optional<Schema> обрана схема, або Optional.empty(), якщо вибір скасовано або немає схем.
      */
-    private Optional<Schema> selectSchemaToSave(String dialogTitleHeader) {
-        if (activeSchema != null) {
-            return Optional.of(activeSchema);
-        }
-
+    private Optional<Schema> ensureSchemaIsSelectedAndActive(String dialogTitleHeader) {
         List<Schema> availableSchemas = schemaService.getAllSchemas();
         if (availableSchemas.isEmpty()) {
             showAlert(AlertType.WARNING, "Збереження схеми", "Немає доступних схем", "Спочатку витягніть або завантажте схему.");
@@ -261,12 +260,17 @@ public class MainWindowController {
         }
 
         if (availableSchemas.size() == 1) {
+            // Якщо є тільки одна схема, робимо її активною автоматично
             setActiveSchema(availableSchemas.get(0));
-            return Optional.of(availableSchemas.get(0));
+            return Optional.of(activeSchema);
         }
 
+        // Якщо схем декілька, пропонуємо вибір
         List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
-        ChoiceDialog<String> schemaChoiceDialog = new ChoiceDialog<>(null, schemaDisplayNames);
+        // Пропонуємо активну схему за замовчуванням, якщо вона є
+        String defaultChoice = (activeSchema != null && availableSchemas.contains(activeSchema)) ? getSchemaDisplayName(activeSchema) : null;
+
+        ChoiceDialog<String> schemaChoiceDialog = new ChoiceDialog<>(defaultChoice, schemaDisplayNames);
         schemaChoiceDialog.setTitle("Вибір схеми");
         schemaChoiceDialog.setHeaderText(dialogTitleHeader);
         schemaChoiceDialog.setContentText("Схема:");
@@ -279,7 +283,7 @@ public class MainWindowController {
 
         Schema chosenSchema = findSchemaByDisplayName(chosenSchemaResult.get(), availableSchemas);
         if (chosenSchema != null) {
-            setActiveSchema(chosenSchema);
+            setActiveSchema(chosenSchema); // Встановлюємо вибрану схему як активну
             return Optional.of(chosenSchema);
         } else {
             showAlert(AlertType.ERROR, "Помилка вибору", "Не вдалося знайти вибрану схему.", null);
@@ -287,25 +291,22 @@ public class MainWindowController {
         }
     }
 
-
     @FXML
     private void handleSaveSchemaDirectAction() { // "Зберегти"
-        Optional<Schema> schemaToSaveOpt = selectSchemaToSave("Виберіть схему для збереження (перезапису):");
+        Optional<Schema> schemaToSaveOpt = ensureSchemaIsSelectedAndActive("Виберіть схему для збереження (перезапису):");
         if (schemaToSaveOpt.isEmpty()) {
-            return; // Користувач скасував вибір або немає схем
+            return;
         }
         final Schema schemaToSave = schemaToSaveOpt.get();
 
         if (schemaToSave.getLastSavedPath() == null) {
-            // Якщо шляху немає, "Зберегти" працює як "Зберегти як..."
             statusBarLabel.setText("Шлях для збереження невідомий. Використовується 'Зберегти як...'.");
-            handleSaveSchemaActionInternal(schemaToSave); // Викликаємо внутрішній метод "Зберегти як"
+            handleSaveSchemaActionInternal(schemaToSave);
             return;
         }
 
         final Path targetPath = schemaToSave.getLastSavedPath();
 
-        // Підтвердження не потрібне для "Зберегти", просто очищуємо і зберігаємо.
         statusBarLabel.setText("Збереження схеми '" + schemaToSave.getName() + "' у " + targetPath.getFileName() + "...");
         if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(true);
         if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
@@ -322,10 +323,9 @@ public class MainWindowController {
         saveTask.setOnSucceeded(event -> {
             statusBarLabel.setText("Схему '" + schemaToSave.getName() + "' успішно збережено у '" + targetPath.getFileName() + "'.");
             showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему '" + schemaToSave.getName() + "' успішно збережено.");
-            // Оновлюємо currentSourceIdentifier об'єкта в пам'яті
             schemaToSave.setCurrentSourceIdentifier("DIR::" + targetPath.toAbsolutePath().toString());
-            // lastSavedPath не змінюється
-            setActiveSchema(schemaToSave); // Оновлюємо активну схему та стан меню
+            // setActiveSchema(schemaToSave); // Активна схема вже встановлена
+            updateSchemaActionMenuItemsState(); // Оновлюємо стан меню
         });
         saveTask.setOnFailed(event -> handleTaskFailure(saveTask, "збереження схеми (перезапис)"));
         saveTask.setOnCancelled(event -> handleTaskCancellation("збереження схеми (перезапис)"));
@@ -340,20 +340,15 @@ public class MainWindowController {
 
     @FXML
     private void handleSaveSchemaAction() { // Обробник для пункту меню "Зберегти схему як..."
-        Optional<Schema> schemaToSaveOpt = selectSchemaToSave("Виберіть схему для операції 'Зберегти як...':");
+        Optional<Schema> schemaToSaveOpt = ensureSchemaIsSelectedAndActive("Виберіть схему для операції 'Зберегти як...':");
         if (schemaToSaveOpt.isEmpty()) {
-            return; // Користувач скасував вибір або немає схем
+            return;
         }
         handleSaveSchemaActionInternal(schemaToSaveOpt.get());
     }
 
-    /**
-     * Внутрішній метод для логіки "Зберегти як...".
-     * @param schemaToSave Схема, яку потрібно зберегти.
-     */
     private void handleSaveSchemaActionInternal(Schema schemaToSave) {
-        final Schema finalSchemaToSave = schemaToSave; // Для використання в лямбдах
-        // setActiveSchema(finalSchemaToSave); // Встановлюється після успішного збереження
+        final Schema finalSchemaToSave = schemaToSave;
 
         String proposedDirName;
         if (finalSchemaToSave.getLastSavedPath() != null) {
@@ -435,8 +430,6 @@ public class MainWindowController {
                 saveTask.setOnSucceeded(event -> {
                     finalSchemaToSave.setLastSavedPath(targetSchemaDir);
                     finalSchemaToSave.setCurrentSourceIdentifier("DIR::" + targetSchemaDir.toAbsolutePath().toString());
-                    // OriginalSourceIdentifier не змінюємо, він зберігає первинне джерело.
-                    // Якщо original був null, SchemaService.saveSchemaToFile запише current як original.
                     setActiveSchema(finalSchemaToSave);
                     statusBarLabel.setText("Схему '" + finalSchemaToSave.getName() + "' успішно збережено як '" + finalSchemaDirectoryName + "'.");
                     showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему збережено в:\n" + targetSchemaDir.toString());
