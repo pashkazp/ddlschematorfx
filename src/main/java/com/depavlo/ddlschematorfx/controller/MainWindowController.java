@@ -2,11 +2,13 @@ package com.depavlo.ddlschematorfx.controller;
 
 import com.depavlo.ddlschematorfx.model.ConnectionDetails;
 import com.depavlo.ddlschematorfx.model.Difference;
+import com.depavlo.ddlschematorfx.model.MigrationScript; // Імпорт MigrationScript
 import com.depavlo.ddlschematorfx.model.Schema;
 import com.depavlo.ddlschematorfx.persistence.ConnectionConfigManager;
 import com.depavlo.ddlschematorfx.persistence.OracleSchemaExtractor;
 import com.depavlo.ddlschematorfx.service.SchemaComparisonService;
 import com.depavlo.ddlschematorfx.service.SchemaService;
+import com.depavlo.ddlschematorfx.service.ScriptGenerationService; // Імпорт ScriptGenerationService
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -56,6 +58,7 @@ public class MainWindowController {
     private ConnectionConfigManager connectionConfigManager;
     private SchemaService schemaService;
     private SchemaComparisonService schemaComparisonService;
+    private ScriptGenerationService scriptGenerationService; // Поле для сервісу генерації скриптів
 
     private static final DateTimeFormatter DIRECTORY_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final String PREF_LAST_SAVE_BASE_DIR = "lastSaveBaseDir";
@@ -70,7 +73,6 @@ public class MainWindowController {
         if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
         if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(true);
         if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(true);
-        // Стан extractSchemaMenuItem буде оновлено в setConnectionConfigManager
     }
 
     public void setPrimaryStage(Stage primaryStage) {
@@ -86,11 +88,15 @@ public class MainWindowController {
 
     public void setSchemaService(SchemaService schemaService) {
         this.schemaService = schemaService;
-        updateSchemaActionMenuItemsState(); // Оновлюємо стан меню після ініціалізації сервісу
+        updateSchemaActionMenuItemsState();
     }
 
     public void setSchemaComparisonService(SchemaComparisonService schemaComparisonService) {
         this.schemaComparisonService = schemaComparisonService;
+    }
+
+    public void setScriptGenerationService(ScriptGenerationService scriptGenerationService) {
+        this.scriptGenerationService = scriptGenerationService;
     }
 
     private void setActiveSchema(Schema schema) {
@@ -100,17 +106,15 @@ public class MainWindowController {
 
     private void updateSchemaActionMenuItemsState() {
         List<Schema> allSchemas = (schemaService != null) ? schemaService.getAllSchemas() : new ArrayList<>();
-        // "Активна" схема для дій збереження - це `this.activeSchema`
-        // Якщо this.activeSchema == null, то дії збереження (пряме і "як") будуть неактивні.
         boolean activeSchemaAvailableForSave = this.activeSchema != null;
 
         if (compareSchemasMenuItem != null) {
             compareSchemasMenuItem.setDisable(allSchemas.size() < 2);
         }
-        if (saveSchemaMenuItem != null) { // "Зберегти як..."
+        if (saveSchemaMenuItem != null) {
             saveSchemaMenuItem.setDisable(!activeSchemaAvailableForSave);
         }
-        if (saveSchemaDirectMenuItem != null) { // "Зберегти"
+        if (saveSchemaDirectMenuItem != null) {
             saveSchemaDirectMenuItem.setDisable(!activeSchemaAvailableForSave);
         }
     }
@@ -185,7 +189,7 @@ public class MainWindowController {
         extractionTask.setOnSucceeded(event -> {
             final Schema extractedSchema = extractionTask.getValue();
             schemaService.addSchema(extractedSchema);
-            setActiveSchema(extractedSchema); // Встановлюємо витягнуту схему як активну
+            setActiveSchema(extractedSchema);
             statusBarLabel.setText("Схему '" + extractedSchema.getName() + "' успішно витягнуто/оновлено.");
             showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему '" + extractedSchema.getName() + "' витягнуто/оновлено!");
         });
@@ -228,7 +232,7 @@ public class MainWindowController {
                 final Schema loadedSchema = loadTask.getValue();
                 loadedSchema.setLastSavedPath(schemaDirectoryPath);
                 schemaService.addSchema(loadedSchema);
-                setActiveSchema(loadedSchema); // Встановлюємо завантажену схему як активну
+                setActiveSchema(loadedSchema);
                 statusBarLabel.setText("Схему '" + loadedSchema.getName() + "' успішно завантажено/оновлено.");
                 showAlert(AlertType.INFORMATION, "Завантаження схеми", "Успіх", "Схему '" + loadedSchema.getName() + "' завантажено/оновлено.");
             });
@@ -246,12 +250,6 @@ public class MainWindowController {
         }
     }
 
-    /**
-     * Визначає, яку схему зберегти, пропонуючи вибір, якщо потрібно.
-     * Встановлює вибрану схему як activeSchema.
-     * @param dialogTitleHeader Заголовок для діалогу вибору схеми.
-     * @return Optional<Schema> обрана схема, або Optional.empty(), якщо вибір скасовано або немає схем.
-     */
     private Optional<Schema> ensureSchemaIsSelectedAndActive(String dialogTitleHeader) {
         List<Schema> availableSchemas = schemaService.getAllSchemas();
         if (availableSchemas.isEmpty()) {
@@ -260,16 +258,14 @@ public class MainWindowController {
         }
 
         if (availableSchemas.size() == 1) {
-            // Якщо є тільки одна схема, робимо її активною автоматично
-            setActiveSchema(availableSchemas.get(0));
+            setActiveSchema(availableSchemas.get(0)); // Встановлюємо єдину схему як активну
             return Optional.of(activeSchema);
         }
 
-        // Якщо схем декілька, пропонуємо вибір
-        List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
-        // Пропонуємо активну схему за замовчуванням, якщо вона є
+        // Якщо є активна схема і вона є в списку, пропонуємо її
         String defaultChoice = (activeSchema != null && availableSchemas.contains(activeSchema)) ? getSchemaDisplayName(activeSchema) : null;
 
+        List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
         ChoiceDialog<String> schemaChoiceDialog = new ChoiceDialog<>(defaultChoice, schemaDisplayNames);
         schemaChoiceDialog.setTitle("Вибір схеми");
         schemaChoiceDialog.setHeaderText(dialogTitleHeader);
@@ -283,7 +279,7 @@ public class MainWindowController {
 
         Schema chosenSchema = findSchemaByDisplayName(chosenSchemaResult.get(), availableSchemas);
         if (chosenSchema != null) {
-            setActiveSchema(chosenSchema); // Встановлюємо вибрану схему як активну
+            setActiveSchema(chosenSchema);
             return Optional.of(chosenSchema);
         } else {
             showAlert(AlertType.ERROR, "Помилка вибору", "Не вдалося знайти вибрану схему.", null);
@@ -324,8 +320,7 @@ public class MainWindowController {
             statusBarLabel.setText("Схему '" + schemaToSave.getName() + "' успішно збережено у '" + targetPath.getFileName() + "'.");
             showAlert(AlertType.INFORMATION, "Збереження схеми", "Успіх", "Схему '" + schemaToSave.getName() + "' успішно збережено.");
             schemaToSave.setCurrentSourceIdentifier("DIR::" + targetPath.toAbsolutePath().toString());
-            // setActiveSchema(schemaToSave); // Активна схема вже встановлена
-            updateSchemaActionMenuItemsState(); // Оновлюємо стан меню
+            setActiveSchema(schemaToSave);
         });
         saveTask.setOnFailed(event -> handleTaskFailure(saveTask, "збереження схеми (перезапис)"));
         saveTask.setOnCancelled(event -> handleTaskCancellation("збереження схеми (перезапис)"));
@@ -508,6 +503,9 @@ public class MainWindowController {
         Task<List<Difference>> comparisonTask = new Task<>() {
             @Override
             protected List<Difference> call() throws Exception {
+                if (schemaComparisonService == null) {
+                    throw new IllegalStateException("SchemaComparisonService не ініціалізовано.");
+                }
                 return schemaComparisonService.compareSchemas(sourceSchema, targetSchema);
             }
         };
@@ -515,6 +513,26 @@ public class MainWindowController {
         comparisonTask.setOnSucceeded(event -> {
             List<Difference> differences = comparisonTask.getValue();
             statusBarLabel.setText("Порівняння завершено. Знайдено відмінностей: " + differences.size());
+
+            if (scriptGenerationService != null && !differences.isEmpty()) {
+                System.out.println("\n--- Генерація скриптів для " + differences.size() + " відмінностей ---");
+                List<MigrationScript> migrationScripts = scriptGenerationService.generateScripts(differences);
+                System.out.println("Згенеровано " + migrationScripts.size() + " міграційних скриптів:");
+                migrationScripts.forEach(script -> {
+                    System.out.println("\n====================================================");
+                    System.out.println("Файл: " + script.getFileName());
+                    System.out.println("Тип об'єкта: " + script.getObjectType());
+                    System.out.println("Порядок: " + script.getExecutionOrder());
+                    System.out.println("----------------------------------------------------");
+                    System.out.println(script.getScriptContent());
+                    System.out.println("====================================================\n");
+                });
+            } else if (differences.isEmpty()) {
+                System.out.println("Відмінностей не знайдено, скрипти не генеруються.");
+            } else {
+                System.err.println("ScriptGenerationService не ініціалізовано, неможливо згенерувати скрипти.");
+            }
+
             if (differences.isEmpty()) {
                 showAlert(AlertType.INFORMATION, "Результат порівняння", "Відмінностей не знайдено",
                         "Схеми '" + sourceSchema.getName() + "' та '" + targetSchema.getName() + "' ідентичні.");
