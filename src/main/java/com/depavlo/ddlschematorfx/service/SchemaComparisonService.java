@@ -4,8 +4,7 @@ import com.depavlo.ddlschematorfx.model.Difference;
 import com.depavlo.ddlschematorfx.model.DifferenceType;
 import com.depavlo.ddlschematorfx.model.ObjectType;
 import com.depavlo.ddlschematorfx.model.Schema;
-// JSQLFormatter більше не використовується
-// import com.manticore.jsqlformatter.JSQLFormatter;
+import com.depavlo.ddlschematorfx.utils.DdlUtils; // Імпорт утиліт
 import org.apache.commons.collections4.keyvalue.MultiKey;
 
 import java.util.ArrayList;
@@ -13,8 +12,6 @@ import java.util.List;
 import java.util.Map;
 
 public class SchemaComparisonService {
-
-    // Константи FAILED_TO_FORMAT_START та FAILED_TO_FORMAT_END більше не потрібні
 
     public List<Difference> compareSchemas(Schema sourceSchema, Schema targetSchema) {
         if (sourceSchema == null || targetSchema == null) {
@@ -25,14 +22,10 @@ public class SchemaComparisonService {
         Map<MultiKey<?>, String> sourceObjects = sourceSchema.getObjectDdls();
         Map<MultiKey<?>, String> targetObjects = targetSchema.getObjectDdls();
 
-        // JSQLFormatter більше не ініціалізується та не використовується
-        // JSQLFormatter formatter = new JSQLFormatter();
-
         // Об'єкти, що є в source, але відсутні в target (REMOVED)
         for (Map.Entry<MultiKey<?>, String> sourceEntry : sourceObjects.entrySet()) {
             MultiKey<?> sourceMultiKey = sourceEntry.getKey();
             if (!targetObjects.containsKey(sourceMultiKey)) {
-                // Перевіряємо, що ключ складається з двох частин: ObjectType та String (objectName)
                 if (sourceMultiKey.size() == 2 && sourceMultiKey.getKey(0) instanceof ObjectType && sourceMultiKey.getKey(1) instanceof String) {
                     ObjectType objectType = (ObjectType) sourceMultiKey.getKey(0);
                     String objectName = (String) sourceMultiKey.getKey(1);
@@ -40,8 +33,8 @@ public class SchemaComparisonService {
                             DifferenceType.REMOVED,
                             objectType,
                             objectName,
-                            sourceSchema.getName(), // Власник схеми-джерела
-                            sourceEntry.getValue(), // Оригінальний DDL
+                            sourceSchema.getName(),
+                            sourceEntry.getValue(),
                             null,
                             "Object removed from target schema (Owner: " + sourceSchema.getName() + ")"
                     ));
@@ -54,46 +47,47 @@ public class SchemaComparisonService {
         // Об'єкти, що є в target (ADDED або MODIFIED)
         for (Map.Entry<MultiKey<?>, String> targetEntry : targetObjects.entrySet()) {
             MultiKey<?> targetMultiKey = targetEntry.getKey();
-            String targetDdl = targetEntry.getValue(); // Оригінальний DDL
+            String originalTargetDdl = targetEntry.getValue();
 
-            // Перевіряємо, що ключ складається з двох частин: ObjectType та String (objectName)
             if (targetMultiKey.size() == 2 && targetMultiKey.getKey(0) instanceof ObjectType && targetMultiKey.getKey(1) instanceof String) {
                 ObjectType objectType = (ObjectType) targetMultiKey.getKey(0);
                 String objectName = (String) targetMultiKey.getKey(1);
 
-                // Логіка форматування та перевірки маркерів помилок видалена
-                // String ddlToCompareTarget = targetDdl;
-
                 if (!sourceObjects.containsKey(targetMultiKey)) {
-                    // Об'єкт додано (є в target, але немає в source)
+                    // Об'єкт додано
                     differences.add(new Difference(
                             DifferenceType.ADDED,
                             objectType,
                             objectName,
-                            targetSchema.getName(), // Власник цільової схеми
+                            targetSchema.getName(),
                             null,
-                            targetDdl, // Оригінальний DDL
+                            originalTargetDdl,
                             "Object added to target schema (Owner: " + targetSchema.getName() + ")"
                     ));
                 } else {
                     // Об'єкт існує в обох схемах, перевіряємо на зміни
-                    String sourceDdl = sourceObjects.get(targetMultiKey); // Оригінальний DDL
+                    String originalSourceDdl = sourceObjects.get(targetMultiKey);
 
-                    // Логіка форматування та перевірки маркерів помилок видалена
-                    // String ddlToCompareSource = sourceDdl;
+                    // Нормалізуємо DDL для порівняння, видаляючи префікси схем
+                    String normalizedSourceDdl = DdlUtils.stripSchemaPrefixesForComparison(originalSourceDdl, sourceSchema.getName());
+                    String normalizedTargetDdl = DdlUtils.stripSchemaPrefixesForComparison(originalTargetDdl, targetSchema.getName());
 
-                    // Пряме порівняння DDL (припускаємо, що вони вже попередньо відформатовані зовнішнім інструментом)
-                    // Перевіряємо на null перед порівнянням, щоб уникнути NullPointerException
-                    boolean areDdlsEqual = (sourceDdl == null && targetDdl == null) || (sourceDdl != null && sourceDdl.equals(targetDdl));
+                    // Додатково, можна нормалізувати регістр та пробільні символи, якщо потрібно
+                    // normalizedSourceDdl = normalizedSourceDdl.toUpperCase().replaceAll("\\s+", " ").trim();
+                    // normalizedTargetDdl = normalizedTargetDdl.toUpperCase().replaceAll("\\s+", " ").trim();
+
+
+                    boolean areDdlsEqual = (normalizedSourceDdl == null && normalizedTargetDdl == null) ||
+                            (normalizedSourceDdl != null && normalizedSourceDdl.equals(normalizedTargetDdl));
 
                     if (!areDdlsEqual) {
                         differences.add(new Difference(
                                 DifferenceType.MODIFIED,
                                 objectType,
                                 objectName,
-                                targetSchema.getName(), // Власник цільової схеми (або sourceSchema.getName(), залежно від логіки відображення)
-                                sourceDdl, // Оригінальний DDL
-                                targetDdl, // Оригінальний DDL
+                                targetSchema.getName(),
+                                originalSourceDdl, // Зберігаємо оригінальні DDL
+                                originalTargetDdl,
                                 "Object DDL has been modified (Compared owners: Source '" + sourceSchema.getName() + "', Target '" + targetSchema.getName() + "')"
                         ));
                     }

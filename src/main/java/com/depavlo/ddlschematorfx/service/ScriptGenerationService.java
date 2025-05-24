@@ -4,6 +4,7 @@ import com.depavlo.ddlschematorfx.model.Difference;
 import com.depavlo.ddlschematorfx.model.DifferenceType;
 import com.depavlo.ddlschematorfx.model.MigrationScript;
 import com.depavlo.ddlschematorfx.model.ObjectType;
+import com.depavlo.ddlschematorfx.utils.DdlUtils; // Імпорт утиліт
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,12 +12,11 @@ import java.util.stream.Collectors;
 
 public class ScriptGenerationService {
 
-    // Порядок виконання для різних типів операцій
-    private static final int ORDER_DROP_MODIFIED_RECREATABLE = 10; // Наприклад, для індексів, які будуть перестворені
+    private static final int ORDER_DROP_MODIFIED_RECREATABLE = 10;
     private static final int ORDER_DROP_REMOVED = 20;
     private static final int ORDER_CREATE_ADDED = 30;
-    private static final int ORDER_ALTER_OR_CREATE_REPLACE_MODIFIED = 40; // Для CREATE OR REPLACE
-    private static final int ORDER_MANUAL_REVIEW_MODIFIED = 50; // Для таблиць, послідовностей, що потребують уваги
+    private static final int ORDER_ALTER_OR_CREATE_REPLACE_MODIFIED = 40;
+    private static final int ORDER_MANUAL_REVIEW_MODIFIED = 50;
 
     public List<MigrationScript> generateScripts(List<Difference> differences) {
         List<MigrationScript> migrationScripts = new ArrayList<>();
@@ -37,99 +37,97 @@ public class ScriptGenerationService {
                     break;
             }
         }
-        // Тут можна додати сортування migrationScripts за полем executionOrder, якщо потрібно
-        // migrationScripts.sort(Comparator.comparingInt(MigrationScript::getExecutionOrder));
         return migrationScripts;
     }
 
     private MigrationScript generateCreateScript(Difference diff) {
         String fileName = String.format("CREATE_%s_%s.sql", diff.getObjectType(), sanitizeFileName(diff.getObjectName()));
-        // targetDdl має містити повний CREATE statement
-        String content = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() : "-- ERROR: Target DDL is missing for ADDED object " + diff.getObjectName();
-        if (!content.endsWith(";")) {
-            content += "\n/"; // Додаємо слеш для виконання в Oracle, якщо його немає (або краще ;)
+        String originalTargetDdl = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() : "-- ERROR: Target DDL is missing for ADDED object " + diff.getObjectName();
+
+        // Намагаємося видалити префікс схеми з основної CREATE заяви
+        String content = DdlUtils.stripSchemaFromCreateStatement(originalTargetDdl, diff.getObjectType(), diff.getObjectName());
+
+        if (!content.endsWith(";") && !content.endsWith("/")) {
+            content += "\n/";
+        } else if (content.endsWith(";") && !content.trim().endsWith("\n/")){
+            content = content.substring(0, content.length()-1) + "\n/";
         }
         return new MigrationScript(diff.getObjectType(), fileName, content, ORDER_CREATE_ADDED);
     }
 
     private MigrationScript generateDropScript(Difference diff) {
         String objectTypeForDrop = diff.getObjectType().name().replace("_", " ");
-        // Особливі випадки для DROP
-        if (diff.getObjectType() == ObjectType.PACKAGE && diff.getObjectName().toUpperCase().endsWith("_BODY")) {
-             // Це може бути не зовсім коректно, якщо тіло пакета видаляється окремо.
-             // Зазвичай DROP PACKAGE видаляє і спеку, і тіло.
-             // Якщо це саме видалення ТІЛА, то команда інша.
-             // Поки що припускаємо, що видаляється весь пакет, якщо тип PACKAGE.
-             // Якщо ж це саме PACKAGE_BODY, то треба мати такий ObjectType.
-        } else if (diff.getObjectType() == ObjectType.TYPE && diff.getObjectName().toUpperCase().endsWith("_BODY")) {
-            // Аналогічно для TYPE BODY
-        }
-
-
+        String objectNameToDrop = sanitizeIdentifier(diff.getObjectName()); // Використовуємо некваліфіковане ім'я
         String fileName = String.format("DROP_%s_%s.sql", diff.getObjectType(), sanitizeFileName(diff.getObjectName()));
-        String content = String.format("DROP %s %s.%s;\n/",
-                objectTypeForDrop,
-                sanitizeIdentifier(diff.getObjectOwner()),
-                sanitizeIdentifier(diff.getObjectName()));
-        
-        // Деякі об'єкти не мають власника в DROP команді (наприклад, DIRECTORY, PUBLIC SYNONYM)
-        // Це потребує більш детальної логіки або перевірки типів
-        if (diff.getObjectType() == ObjectType.DIRECTORY_OBJECT || 
-            (diff.getObjectType() == ObjectType.SYNONYM && "PUBLIC".equalsIgnoreCase(diff.getObjectOwner()))) {
-             content = String.format("DROP %s %s;\n/",
-                objectTypeForDrop,
-                sanitizeIdentifier(diff.getObjectName()));
+
+        String content;
+        // Для деяких типів об'єктів (наприклад, PUBLIC SYNONYM, DIRECTORY) не потрібен власник
+        if (diff.getObjectType() == ObjectType.SYNONYM && "PUBLIC".equalsIgnoreCase(diff.getObjectOwner())) {
+            content = String.format("DROP PUBLIC %s %s;\n/",
+                    objectTypeForDrop, // SYNONYM
+                    objectNameToDrop);
+        } else if (diff.getObjectType() == ObjectType.DIRECTORY_OBJECT) {
+            content = String.format("DROP %s %s;\n/",
+                    objectTypeForDrop, // DIRECTORY
+                    objectNameToDrop);
         }
-
-
+        else {
+            // За замовчуванням генеруємо DROP без вказівки схеми (для виконання у цільовій схемі)
+            content = String.format("DROP %s %s;\n/",
+                    objectTypeForDrop,
+                    objectNameToDrop);
+        }
         return new MigrationScript(diff.getObjectType(), fileName, content, ORDER_DROP_REMOVED);
     }
 
     private List<MigrationScript> generateModifyScripts(Difference diff) {
         List<MigrationScript> scripts = new ArrayList<>();
-        String objectOwner = sanitizeIdentifier(diff.getObjectOwner());
-        String objectName = sanitizeIdentifier(diff.getObjectName());
-        String cleanObjectNameForFile = sanitizeFileName(diff.getObjectName());
+        // String objectOwner = sanitizeIdentifier(diff.getObjectOwner()); // Власник тепер менш важливий для генерації
+        String objectNameForFile = sanitizeFileName(diff.getObjectName());
+        String unqualifiedObjectName = diff.getObjectName(); // Має бути некваліфікованим
 
         switch (diff.getObjectType()) {
             case VIEW:
             case PROCEDURE:
             case FUNCTION:
-            case PACKAGE: // Припускаємо, що targetDdl містить CREATE OR REPLACE PACKAGE (для специфікації)
-            // case PACKAGE_BODY: // Потрібен окремий ObjectType для PACKAGE_BODY
+            case PACKAGE:
             case TRIGGER:
-            case SYNONYM: // CREATE OR REPLACE SYNONYM
-                String createOrReplaceContent = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() : String.format("-- ERROR: Target DDL is missing for MODIFIED %s %s.%s", diff.getObjectType(), objectOwner, objectName);
+            case SYNONYM: // Для не-public синонімів
+                String originalTargetDdl = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() :
+                        String.format("-- ERROR: Target DDL is missing for MODIFIED %s %s", diff.getObjectType(), unqualifiedObjectName);
+
+                String createOrReplaceContent = DdlUtils.stripSchemaFromCreateStatement(originalTargetDdl, diff.getObjectType(), unqualifiedObjectName);
+
                 if (!createOrReplaceContent.endsWith(";") && !createOrReplaceContent.endsWith("/")) {
-                     createOrReplaceContent += "\n/";
+                    createOrReplaceContent += "\n/";
                 } else if (createOrReplaceContent.endsWith(";") && !createOrReplaceContent.trim().endsWith("\n/")){
-                    // Якщо закінчується на ';', але не на '/', додаємо '/' на новому рядку для деяких випадків
                     createOrReplaceContent = createOrReplaceContent.substring(0, createOrReplaceContent.length()-1) + "\n/";
                 }
 
-
                 scripts.add(new MigrationScript(
                         diff.getObjectType(),
-                        String.format("MODIFY_OR_REPLACE_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile),
+                        String.format("MODIFY_OR_REPLACE_%s_%s.sql", diff.getObjectType(), objectNameForFile),
                         createOrReplaceContent,
                         ORDER_ALTER_OR_CREATE_REPLACE_MODIFIED
                 ));
                 break;
-            
-            case INDEX:
-                // Для індексів безпечніше перестворити: DROP + CREATE
-                String dropIndexFileName = String.format("DROP_MODIFIED_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile);
-                String dropIndexContent = String.format("DROP INDEX %s.%s;\n/", objectOwner, objectName);
-                 if ("PUBLIC".equalsIgnoreCase(diff.getObjectOwner()) && diff.getObjectType() == ObjectType.SYNONYM) { // Малоймовірно для індексів, але для загальності
-                    dropIndexContent = String.format("DROP PUBLIC %s %s;\n/", diff.getObjectType().name().replace("_"," "), objectName);
-                }
 
+            case INDEX:
+                String dropIndexFileName = String.format("DROP_MODIFIED_%s_%s.sql", diff.getObjectType(), objectNameForFile);
+                // Індекси часто мають унікальні імена в межах схеми, тому власник не потрібен для DROP
+                String dropIndexContent = String.format("DROP INDEX %s;\n/", sanitizeIdentifier(unqualifiedObjectName));
                 scripts.add(new MigrationScript(diff.getObjectType(), dropIndexFileName, dropIndexContent, ORDER_DROP_MODIFIED_RECREATABLE));
 
-                String createIndexFileName = String.format("CREATE_MODIFIED_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile);
-                String createIndexContent = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() : String.format("-- ERROR: Target DDL is missing for recreating MODIFIED INDEX %s.%s", objectOwner, objectName);
+                String createIndexFileName = String.format("CREATE_MODIFIED_%s_%s.sql", diff.getObjectType(), objectNameForFile);
+                String originalCreateIndexDdl = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() :
+                        String.format("-- ERROR: Target DDL is missing for recreating MODIFIED INDEX %s", unqualifiedObjectName);
+
+                // Для CREATE INDEX, якщо він містить ім'я таблиці з префіксом схеми, це може бути проблемою.
+                // DdlUtils.stripSchemaFromCreateStatement може не спрацювати ідеально для CREATE INDEX.
+                // Поки що використовуємо "як є", але з попередженням, що може знадобитися ручне редагування.
+                String createIndexContent = originalCreateIndexDdl; // Або спробувати DdlUtils.stripSchemaPrefixesForComparison(originalCreateIndexDdl, diff.getObjectOwner());
                 if (!createIndexContent.endsWith(";") && !createIndexContent.endsWith("/")) {
-                     createIndexContent += "\n/";
+                    createIndexContent += "\n/";
                 } else if (createIndexContent.endsWith(";") && !createIndexContent.trim().endsWith("\n/")){
                     createIndexContent = createIndexContent.substring(0, createIndexContent.length()-1) + "\n/";
                 }
@@ -138,76 +136,74 @@ public class ScriptGenerationService {
 
             case TABLE:
                 String tableComment = String.format(
-                        "-- MODIFIED TABLE: %s.%s\n" +
-                        "-- УВАГА: Потрібен ручний аналіз та генерація ALTER TABLE скриптів.\n" +
-                        "-- Автоматична генерація DROP+CREATE не виконується через ризик втрати даних.\n" +
-                        "-- --- Source DDL (стара версія) ---\n%s\n" +
-                        "-- --- Target DDL (нова версія) ---\n%s\n",
-                        objectOwner, objectName,
-                        commentOutDdl(diff.getSourceDdl()),
-                        commentOutDdl(diff.getTargetDdl())
+                        "-- MODIFIED TABLE: %s (Owner: %s -> %s)\n" + // Додаємо інформацію про власників для контексту
+                                "-- УВАГА: Потрібен ручний аналіз та генерація ALTER TABLE скриптів.\n" +
+                                "-- Автоматична генерація DROP+CREATE не виконується через ризик втрати даних.\n" +
+                                "-- --- Source DDL (стара версія, схема: %s) ---\n%s\n" +
+                                "-- --- Target DDL (нова версія, схема: %s) ---\n%s\n",
+                        unqualifiedObjectName, diff.getObjectOwner(), diff.getObjectOwner(), // Припускаємо, що власник той самий для логічного об'єкта
+                        diff.getObjectOwner(), commentOutDdl(diff.getSourceDdl()),
+                        diff.getObjectOwner(), commentOutDdl(diff.getTargetDdl())
                 );
                 scripts.add(new MigrationScript(
                         diff.getObjectType(),
-                        String.format("REVIEW_TABLE_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile),
+                        String.format("REVIEW_TABLE_%s_%s.sql", diff.getObjectType(), objectNameForFile),
                         tableComment,
                         ORDER_MANUAL_REVIEW_MODIFIED
                 ));
                 break;
-            
+
             case SEQUENCE:
-                 String sequenceComment = String.format(
-                        "-- MODIFIED SEQUENCE: %s.%s\n" +
-                        "-- УВАГА: Зміна послідовності через DROP+CREATE скине її поточне значення.\n" +
-                        "-- Розгляньте можливість використання ALTER SEQUENCE для зміни параметрів.\n" +
-                        "-- --- Source DDL (стара версія) ---\n%s\n" +
-                        "-- --- Target DDL (нова версія, може бути використана для перестворення) ---\n%s\n",
-                        objectOwner, objectName,
-                        commentOutDdl(diff.getSourceDdl()),
-                        (diff.getTargetDdl() != null ? diff.getTargetDdl().trim() + "\n/" : "-- Target DDL for SEQUENCE is missing")
+                String sequenceComment = String.format(
+                        "-- MODIFIED SEQUENCE: %s (Owner: %s -> %s)\n" +
+                                "-- УВАГА: Зміна послідовності через DROP+CREATE скине її поточне значення.\n" +
+                                "-- Розгляньте можливість використання ALTER SEQUENCE для зміни параметрів.\n" +
+                                "-- --- Source DDL (стара версія, схема: %s) ---\n%s\n" +
+                                "-- --- Target DDL (нова версія, схема: %s, може бути використана для перестворення) ---\n%s\n",
+                        unqualifiedObjectName, diff.getObjectOwner(), diff.getObjectOwner(),
+                        diff.getObjectOwner(), commentOutDdl(diff.getSourceDdl()),
+                        diff.getObjectOwner(), (diff.getTargetDdl() != null ? DdlUtils.stripSchemaFromCreateStatement(diff.getTargetDdl().trim(), ObjectType.SEQUENCE, unqualifiedObjectName) + "\n/" : "-- Target DDL for SEQUENCE is missing")
                 );
                 scripts.add(new MigrationScript(
                         diff.getObjectType(),
-                        String.format("REVIEW_SEQUENCE_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile),
+                        String.format("REVIEW_SEQUENCE_%s_%s.sql", diff.getObjectType(), objectNameForFile),
                         sequenceComment,
                         ORDER_MANUAL_REVIEW_MODIFIED
                 ));
                 break;
 
-            // Додайте обробку інших типів за потреби
             default:
-                String defaultComment = String.format(
-                        "-- MODIFIED OBJECT (TYPE: %s): %s.%s\n" +
-                        "-- УВАГА: Автоматична генерація скрипту для цього типу об'єкта не реалізована повністю.\n" +
-                        "-- Розгляньте можливість використання CREATE OR REPLACE, якщо це доречно, або ручне оновлення.\n" +
-                        "-- --- Source DDL (стара версія) ---\n%s\n" +
-                        "-- --- Target DDL (нова версія) ---\n%s\n",
-                        diff.getObjectType(), objectOwner, objectName,
-                        commentOutDdl(diff.getSourceDdl()),
-                        commentOutDdl(diff.getTargetDdl())
-                );
-                 if (diff.getTargetDdl() != null && 
-                    (diff.getTargetDdl().toUpperCase().contains("CREATE OR REPLACE") || 
-                     diff.getObjectType() == ObjectType.MATERIALIZED_VIEW)) { // MVIEW часто перестворюють
-                    String createOrReplaceDefault = diff.getTargetDdl().trim();
-                     if (!createOrReplaceDefault.endsWith(";") && !createOrReplaceDefault.endsWith("/")) {
-                         createOrReplaceDefault += "\n/";
-                     } else if (createOrReplaceDefault.endsWith(";") && !createOrReplaceDefault.trim().endsWith("\n/")){
-                        createOrReplaceDefault = createOrReplaceDefault.substring(0, createOrReplaceDefault.length()-1) + "\n/";
-                    }
-                    defaultComment = createOrReplaceDefault; // Якщо є CREATE OR REPLACE, використовуємо його
-                     scripts.add(new MigrationScript(
-                        diff.getObjectType(),
-                        String.format("MODIFY_OR_REPLACE_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile),
-                        defaultComment,
-                        ORDER_ALTER_OR_CREATE_REPLACE_MODIFIED
-                     ));
-                } else {
+                String defaultTargetDdl = (diff.getTargetDdl() != null) ? diff.getTargetDdl().trim() : "";
+                String modifiedDefaultDdl = DdlUtils.stripSchemaFromCreateStatement(defaultTargetDdl, diff.getObjectType(), unqualifiedObjectName);
+                if (!modifiedDefaultDdl.endsWith(";") && !modifiedDefaultDdl.endsWith("/")) {
+                    modifiedDefaultDdl += "\n/";
+                } else if (modifiedDefaultDdl.endsWith(";") && !modifiedDefaultDdl.trim().endsWith("\n/")){
+                    modifiedDefaultDdl = modifiedDefaultDdl.substring(0, modifiedDefaultDdl.length()-1) + "\n/";
+                }
+
+                if (diff.getTargetDdl() != null && diff.getTargetDdl().toUpperCase().contains("CREATE OR REPLACE")) {
                     scripts.add(new MigrationScript(
-                        diff.getObjectType(),
-                        String.format("REVIEW_OBJECT_%s_%s.sql", diff.getObjectType(), cleanObjectNameForFile),
-                        defaultComment,
-                        ORDER_MANUAL_REVIEW_MODIFIED
+                            diff.getObjectType(),
+                            String.format("MODIFY_OR_REPLACE_%s_%s.sql", diff.getObjectType(), objectNameForFile),
+                            modifiedDefaultDdl,
+                            ORDER_ALTER_OR_CREATE_REPLACE_MODIFIED
+                    ));
+                } else {
+                    String defaultComment = String.format(
+                            "-- MODIFIED OBJECT (TYPE: %s): %s (Owner: %s -> %s)\n" +
+                                    "-- УВАГА: Автоматична генерація скрипту для цього типу об'єкта може бути неповною.\n" +
+                                    "-- Розгляньте можливість використання CREATE OR REPLACE або ручне оновлення.\n" +
+                                    "-- --- Source DDL (стара версія, схема: %s) ---\n%s\n" +
+                                    "-- --- Target DDL (нова версія, схема: %s, спроба зробити schema-agnostic) ---\n%s\n",
+                            diff.getObjectType(), unqualifiedObjectName, diff.getObjectOwner(), diff.getObjectOwner(),
+                            diff.getObjectOwner(), commentOutDdl(diff.getSourceDdl()),
+                            diff.getObjectOwner(), commentOutDdl(modifiedDefaultDdl) // Показуємо модифікований DDL у коментарі
+                    );
+                    scripts.add(new MigrationScript(
+                            diff.getObjectType(),
+                            String.format("REVIEW_OBJECT_%s_%s.sql", diff.getObjectType(), objectNameForFile),
+                            defaultComment,
+                            ORDER_MANUAL_REVIEW_MODIFIED
                     ));
                 }
                 break;
@@ -219,25 +215,20 @@ public class ScriptGenerationService {
         if (name == null) return "UNKNOWN_OBJECT";
         return name.replaceAll("[^a-zA-Z0-9_.-]", "_").toUpperCase();
     }
-    
+
     private String sanitizeIdentifier(String identifier) {
         if (identifier == null) return "\"UNKNOWN_IDENTIFIER\"";
-        // Якщо ідентифікатор не взятий в лапки і містить символи, що вимагають лапок, або є ключовим словом,
-        // його слід взяти в лапки. Для простоти, якщо він не в лапках і містить щось крім букв, цифр, _, $, # - беремо в лапки.
-        // Або якщо він є регістро-залежним (містить малі літери).
-        // Oracle зберігає нецитовані ідентифікатори у верхньому регістрі.
-        if (identifier.matches("^[A-Z][A-Z0-9_\\$#]*$") && !isOracleKeyword(identifier.toUpperCase())) {
-            return identifier.toUpperCase(); // Нецитовані, стандартні імена
+        // Проста логіка: якщо містить щось крім букв, цифр, підкреслення, долара, решітки, або якщо є малі літери - беремо в лапки.
+        // Це не враховує ключові слова Oracle.
+        if (!identifier.matches("^[A-Z][A-Z0-9_\\$#]*$") || !identifier.equals(identifier.toUpperCase())) {
+            return "\"" + identifier.replace("\"", "\"\"") + "\""; // Цитуємо, екрануючи внутрішні лапки
         }
-        return "\"" + identifier.replace("\"", "\"\"") + "\""; // Цитуємо, екрануючи внутрішні лапки
+        // Якщо ідентифікатор вже в лапках або є стандартним, повертаємо як є (або у верхньому регістрі)
+        if (identifier.startsWith("\"") && identifier.endsWith("\"")) {
+            return identifier;
+        }
+        return identifier.toUpperCase();
     }
-
-    // Дуже спрощений список ключових слів Oracle, потребує розширення
-    private static final List<String> ORACLE_KEYWORDS = List.of("TABLE", "VIEW", "INDEX", "USER", "ORDER", "GROUP", "SESSION"); 
-    private boolean isOracleKeyword(String word) {
-        return ORACLE_KEYWORDS.contains(word.toUpperCase());
-    }
-
 
     private String commentOutDdl(String ddl) {
         if (ddl == null || ddl.trim().isEmpty()) {
