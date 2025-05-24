@@ -73,6 +73,7 @@ public class MainWindowController {
         if (saveSchemaMenuItem != null) saveSchemaMenuItem.setDisable(true);
         if (saveSchemaDirectMenuItem != null) saveSchemaDirectMenuItem.setDisable(true);
         if (extractSchemaMenuItem != null) extractSchemaMenuItem.setDisable(true);
+        // Стан extractSchemaMenuItem буде оновлено в setConnectionConfigManager
     }
 
     public void setPrimaryStage(Stage primaryStage) {
@@ -88,14 +89,14 @@ public class MainWindowController {
 
     public void setSchemaService(SchemaService schemaService) {
         this.schemaService = schemaService;
-        updateSchemaActionMenuItemsState();
+        updateSchemaActionMenuItemsState(); // Оновлюємо стан меню після ініціалізації сервісу
     }
 
     public void setSchemaComparisonService(SchemaComparisonService schemaComparisonService) {
         this.schemaComparisonService = schemaComparisonService;
     }
 
-    public void setScriptGenerationService(ScriptGenerationService scriptGenerationService) {
+    public void setScriptGenerationService(ScriptGenerationService scriptGenerationService) { // Сеттер
         this.scriptGenerationService = scriptGenerationService;
     }
 
@@ -111,12 +112,13 @@ public class MainWindowController {
         if (compareSchemasMenuItem != null) {
             compareSchemasMenuItem.setDisable(allSchemas.size() < 2);
         }
-        if (saveSchemaMenuItem != null) {
+        if (saveSchemaMenuItem != null) { // "Зберегти як..."
             saveSchemaMenuItem.setDisable(!activeSchemaAvailableForSave);
         }
-        if (saveSchemaDirectMenuItem != null) {
+        if (saveSchemaDirectMenuItem != null) { // "Зберегти"
             saveSchemaDirectMenuItem.setDisable(!activeSchemaAvailableForSave);
         }
+        // Стан extractSchemaMenuItem оновлюється в setConnectionConfigManager та handleDbSettings
     }
 
     @FXML
@@ -189,7 +191,7 @@ public class MainWindowController {
         extractionTask.setOnSucceeded(event -> {
             final Schema extractedSchema = extractionTask.getValue();
             schemaService.addSchema(extractedSchema);
-            setActiveSchema(extractedSchema);
+            setActiveSchema(extractedSchema); // Встановлюємо витягнуту схему як активну
             statusBarLabel.setText("Схему '" + extractedSchema.getName() + "' успішно витягнуто/оновлено.");
             showAlert(AlertType.INFORMATION, "Витягнення схеми", "Успіх", "Схему '" + extractedSchema.getName() + "' витягнуто/оновлено!");
         });
@@ -232,7 +234,7 @@ public class MainWindowController {
                 final Schema loadedSchema = loadTask.getValue();
                 loadedSchema.setLastSavedPath(schemaDirectoryPath);
                 schemaService.addSchema(loadedSchema);
-                setActiveSchema(loadedSchema);
+                setActiveSchema(loadedSchema); // Встановлюємо завантажену схему як активну
                 statusBarLabel.setText("Схему '" + loadedSchema.getName() + "' успішно завантажено/оновлено.");
                 showAlert(AlertType.INFORMATION, "Завантаження схеми", "Успіх", "Схему '" + loadedSchema.getName() + "' завантажено/оновлено.");
             });
@@ -250,6 +252,12 @@ public class MainWindowController {
         }
     }
 
+    /**
+     * Визначає, яку схему зберегти, пропонуючи вибір, якщо потрібно.
+     * Встановлює вибрану схему як activeSchema.
+     * @param dialogTitleHeader Заголовок для діалогу вибору схеми.
+     * @return Optional<Schema> обрана схема, або Optional.empty(), якщо вибір скасовано або немає схем.
+     */
     private Optional<Schema> ensureSchemaIsSelectedAndActive(String dialogTitleHeader) {
         List<Schema> availableSchemas = schemaService.getAllSchemas();
         if (availableSchemas.isEmpty()) {
@@ -258,14 +266,16 @@ public class MainWindowController {
         }
 
         if (availableSchemas.size() == 1) {
-            setActiveSchema(availableSchemas.get(0)); // Встановлюємо єдину схему як активну
+            // Якщо є тільки одна схема, робимо її активною автоматично
+            setActiveSchema(availableSchemas.get(0));
             return Optional.of(activeSchema);
         }
 
-        // Якщо є активна схема і вона є в списку, пропонуємо її
+        // Якщо схем декілька, пропонуємо вибір
+        List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
+        // Пропонуємо активну схему за замовчуванням, якщо вона є
         String defaultChoice = (activeSchema != null && availableSchemas.contains(activeSchema)) ? getSchemaDisplayName(activeSchema) : null;
 
-        List<String> schemaDisplayNames = availableSchemas.stream().map(this::getSchemaDisplayName).collect(Collectors.toList());
         ChoiceDialog<String> schemaChoiceDialog = new ChoiceDialog<>(defaultChoice, schemaDisplayNames);
         schemaChoiceDialog.setTitle("Вибір схеми");
         schemaChoiceDialog.setHeaderText(dialogTitleHeader);
@@ -279,7 +289,7 @@ public class MainWindowController {
 
         Schema chosenSchema = findSchemaByDisplayName(chosenSchemaResult.get(), availableSchemas);
         if (chosenSchema != null) {
-            setActiveSchema(chosenSchema);
+            setActiveSchema(chosenSchema); // Встановлюємо вибрану схему як активну
             return Optional.of(chosenSchema);
         } else {
             showAlert(AlertType.ERROR, "Помилка вибору", "Не вдалося знайти вибрану схему.", null);
